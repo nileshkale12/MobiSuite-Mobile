@@ -1,0 +1,4 @@
+customtkinter
+paramiko
+scp
+cryptography
