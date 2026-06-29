@@ -97,7 +97,7 @@ Step 4: Initialize Python required dependencies Open your command prompt (cmd) i
 
 Step 5: Run the below command to launch the tool
 Double-click the Launch_Windows.bat file to boot the Control Center, or run it directly in the terminal:
-      Launch_Windows.bat
+      Launch_Windows.bat  or python3 auto_apk_1.0.py
 ```
 
 ## 📖 User Operations & Usage Guide
