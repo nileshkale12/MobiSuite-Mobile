@@ -49,10 +49,10 @@ class NKCyberSuiteMobile(ctk.CTk):
         super().__init__()
         
         self.title("MobiSuite v1.0.0")
-        self.geometry("1100x860")
-        self.minsize(1000, 780)
+        self.geometry("1100x920")
+        self.minsize(1000, 840)
         
-        # SAFE CROSS-PLATFORM WINDOW GEOMETRY DECORATION UNLOCK[cite: 1]
+        # SAFE CROSS-PLATFORM WINDOW GEOMETRY DECORATION UNLOCK
         self.resizable(True, True)
         if IS_LINUX:
             self.attributes('-type', 'normal')
@@ -63,6 +63,7 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.rebuild_dir = ""
         self.unsigned_apk_path = "" 
         self.selected_merge_dir = ""
+        self.install_target_apk = ""  
         self.discovered_android_apps = {}  
         self.discovered_ios_apps = {}
         self.ios_dest_dir = ""
@@ -79,7 +80,6 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#1A1A1E")
         self.sidebar.pack(side="left", fill="y")
         
-        # Restored Diamond Logo Brand Header Configuration
         logo_main = ctk.CTkLabel(self.sidebar, text="💎 MOBISUITE", font=ctk.CTkFont(size=18, weight="bold"), text_color="#00E5FF")
         logo_main.pack(padx=20, pady=(30, 0))
         logo_sub = ctk.CTkLabel(self.sidebar, text="[ M O B I L E ]", font=ctk.CTkFont(size=11, weight="normal"), text_color="#7A7A80")
@@ -105,7 +105,6 @@ class NKCyberSuiteMobile(ctk.CTk):
                                             command=lambda: self.switch_deck_context("console"))
         self.btn_nav_console.pack(padx=15, pady=5, fill="x")
         
-        # Author Verification & Production License Footer[cite: 2]
         copyright_lbl = ctk.CTkLabel(self.sidebar, text="© 2026 Nilesh Kale\nAll Rights Reserved\nVersion 1.0.0", font=ctk.CTkFont(size=10), text_color="gray", justify="center")
         copyright_lbl.pack(side="bottom", pady=15)
 
@@ -139,14 +138,15 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.lbl_task_badge.pack(side="right", padx=20, pady=6)
 
         # ---------------------------------------------------------------------
-        # MAIN DECK DISPLAY CONTAINER
+        # MAIN DECK DISPLAY CONTAINER (SCROLLABLE REFACTION)
         # ---------------------------------------------------------------------
         self.main_deck = ctk.CTkFrame(self, corner_radius=0, fg_color="#0F0F12")
         self.main_deck.pack(side="right", fill="both", expand=True)
         
-        self.view_android = ctk.CTkFrame(self.main_deck, fg_color="transparent")
-        self.view_ios = ctk.CTkFrame(self.main_deck, fg_color="transparent")
-        self.view_settings = ctk.CTkFrame(self.main_deck, fg_color="transparent")
+        # PATCH: Native scroll wraps appended to capture multi-panel widgets overflows
+        self.view_android = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
+        self.view_ios = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
+        self.view_settings = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
         self.view_console = ctk.CTkFrame(self.main_deck, fg_color="transparent")
         
         self.generate_android_deck_ui()
@@ -156,7 +156,6 @@ class NKCyberSuiteMobile(ctk.CTk):
         
         self.switch_deck_context("android")
         
-        # Launch tracking loop pools
         threading.Thread(target=self.verify_and_download_dependencies, daemon=True).start()
         threading.Thread(target=self.device_connection_hud_ticker, daemon=True).start()
 
@@ -164,13 +163,8 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.console_box.insert("end", message + "\n")
         self.console_box.see("end")
 
-    # -------------------------------------------------------------------------
-    # LIVE HUDS SYNC CONTROL PIPELINE
-    # -------------------------------------------------------------------------
     def update_task_state(self, task_description, state_type):
-        """Asynchronously triggers thread-safe UI status banner adaptations."""
         self.lbl_task_desc.configure(text=task_description)
-        
         if state_type == "idle":
             self.lbl_task_badge.configure(text="🔵 IDLE", text_color="#2196F3", fg_color="#0D47A1")
         elif state_type == "running":
@@ -193,13 +187,13 @@ class NKCyberSuiteMobile(ctk.CTk):
 
         if target_deck == "android":
             self.btn_nav_android.configure(fg_color="#2A2B36", text_color="#FFFFFF")
-            self.view_android.pack(fill="both", expand=True, padx=15, pady=15)
+            self.view_android.pack(fill="both", expand=True, padx=5, pady=5)
         elif target_deck == "ios":
             self.btn_nav_ios.configure(fg_color="#2A2B36", text_color="#FFFFFF")
-            self.view_ios.pack(fill="both", expand=True, padx=15, pady=15)
+            self.view_ios.pack(fill="both", expand=True, padx=5, pady=5)
         elif target_deck == "settings":
             self.btn_nav_settings.configure(fg_color="#2A2B36", text_color="#FFFFFF")
-            self.view_settings.pack(fill="both", expand=True, padx=15, pady=15)
+            self.view_settings.pack(fill="both", expand=True, padx=5, pady=5)
             self.check_local_tools_inventory()
         elif target_deck == "console":
             self.btn_nav_console.configure(fg_color="#2A2B36", text_color="#FFFFFF")
@@ -208,10 +202,8 @@ class NKCyberSuiteMobile(ctk.CTk):
     def generate_console_deck_ui(self):
         lbl = ctk.CTkLabel(self.view_console, text="Core Diagnostics & Assessment Stream Log", font=ctk.CTkFont(size=18, weight="bold"))
         lbl.pack(anchor="w", padx=10, pady=(5, 10))
-
         frame = ctk.CTkFrame(self.view_console, fg_color="#141416", border_color="#222226", border_width=1)
         frame.pack(fill="both", expand=True, padx=5, pady=5)
-
         self.console_box = ctk.CTkTextbox(frame, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=13))
         self.console_box.pack(fill="both", expand=True, padx=12, pady=12)
 
@@ -241,16 +233,11 @@ class NKCyberSuiteMobile(ctk.CTk):
                     self.lbl_hud_ios.configure(text="⚪ iOS: Staged", text_color="gray")
             except Exception:
                 self.lbl_hud_ios.configure(text="🔴 iOS: Check IP Syntax", text_color="#FF1744")
-
             time.sleep(4.0)
 
-    # -------------------------------------------------------------------------
-    # ENVIRONMENT CONTROL CENTER
-    # -------------------------------------------------------------------------
     def generate_settings_deck_ui(self):
         lbl = ctk.CTkLabel(self.view_settings, text="Core Environment Control Center", font=ctk.CTkFont(size=18, weight="bold"))
         lbl.pack(anchor="w", padx=10, pady=(5, 5))
-
         bin_card = ctk.CTkFrame(self.view_settings, fg_color="#16161A", corner_radius=6)
         bin_card.pack(fill="x", padx=5, pady=5)
         lbl_mon = ctk.CTkLabel(bin_card, text="Sub-Tool Binary Inventory Workspace Status", font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E5FF")
@@ -307,9 +294,6 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.log("\n[*] Running automated system structural integrity patch routines...")
         threading.Thread(target=self.verify_and_download_dependencies, daemon=True).start()
 
-    # -------------------------------------------------------------------------
-    # ANDROID DECK LAYOUTS
-    # -------------------------------------------------------------------------
     def generate_android_deck_ui(self):
         lbl = ctk.CTkLabel(self.view_android, text="Android Operational Utilities Deck", font=ctk.CTkFont(size=18, weight="bold"))
         lbl.pack(anchor="w", padx=10, pady=(5, 5))
@@ -379,9 +363,48 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.btn_sign_only = ctk.CTkButton(sub_3, text="Zipalign & Sign", width=110, fg_color="#C2185B", hover_color="#D81B60", state="disabled", command=self.start_sign_only)
         self.btn_sign_only.pack(side="right")
 
-    # -------------------------------------------------------------------------
-    # iOS OPERATIONAL UTILITIES
-    # -------------------------------------------------------------------------
+        card_4 = ctk.CTkFrame(self.view_android, fg_color="#16161A", corner_radius=6)
+        card_4.pack(fill="x", pady=4)
+        lbl_4 = ctk.CTkLabel(card_4, text="Step 4: Standalone ADB Installation Engine & Pipeline Extension", font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E676")
+        lbl_4.pack(anchor="w", padx=15, pady=(6, 4))
+        
+        sub_4_file = ctk.CTkFrame(card_4, fg_color="transparent")
+        sub_4_file.pack(fill="x", padx=15, pady=5)
+        btn_br_install = ctk.CTkButton(sub_4_file, text="Select Custom APK", width=140, fg_color="#37474F", hover_color="#455A64", command=self.browse_install_target_apk)
+        btn_br_install.pack(side="left", padx=(0, 5))
+        self.lbl_install_apk = ctk.CTkLabel(sub_4_file, text="No target binary package staged for device deployment.", text_color="#A0A0A5", anchor="w")
+        self.lbl_install_apk.pack(side="left", padx=5)
+
+        param_frame = ctk.CTkFrame(card_4, fg_color="#1E1E24", corner_radius=4, border_color="#2B2B36", border_width=1)
+        param_frame.pack(fill="x", padx=15, pady=(5, 10))
+        lbl_param_title = ctk.CTkLabel(param_frame, text="🕹️ ADVANCED TERMINAL PIPELINE SEQUENCE EXECUTION (CUSTOM PARAMS)", font=ctk.CTkFont(size=10, weight="bold"), text_color="#7A7A80")
+        lbl_param_title.pack(anchor="w", padx=12, pady=(8, 2))
+        
+        radio_row = ctk.CTkFrame(param_frame, fg_color="transparent")
+        radio_row.pack(fill="x", padx=12, pady=4)
+        self.install_mode_var = tk.StringVar(value="standard")
+        
+        rad_std = ctk.CTkRadioButton(radio_row, text="Standard Install (-r)", variable=self.install_mode_var, value="standard", command=self.sync_custom_adb_cmd_string)
+        rad_std.pack(side="left", padx=(0, 10))
+        rad_down = ctk.CTkRadioButton(radio_row, text="Force Downgrade (-d)", variable=self.install_mode_var, value="downgrade", command=self.sync_custom_adb_cmd_string)
+        rad_down.pack(side="left", padx=10)
+        rad_test = ctk.CTkRadioButton(radio_row, text="Allow Test Apps (-t)", variable=self.install_mode_var, value="test", command=self.sync_custom_adb_cmd_string)
+        rad_test.pack(side="left", padx=10)
+        rad_vend = ctk.CTkRadioButton(radio_row, text="Play Store Fake (-i Vending)", variable=self.install_mode_var, value="vending", command=self.sync_custom_adb_cmd_string)
+        rad_vend.pack(side="left", padx=10)
+
+        entry_row = ctk.CTkFrame(param_frame, fg_color="transparent")
+        entry_row.pack(fill="x", padx=12, pady=(4, 12))
+        ctk.CTkLabel(entry_row, text="Custom Flag Override:", font=ctk.CTkFont(size=11)).pack(side="left", padx=(0, 5))
+        self.ent_custom_adb = ctk.CTkEntry(entry_row, font=ctk.CTkFont(family="Consolas", size=12), text_color="#00E5FF")
+        self.ent_custom_adb.pack(side="left", fill="x", expand=True, padx=5)
+        self.ent_custom_adb.insert(0, "adb install -r")
+
+        btn_row = ctk.CTkFrame(card_4, fg_color="transparent")
+        btn_row.pack(fill="x", padx=15, pady=(0, 12))
+        self.btn_execute_install = ctk.CTkButton(btn_row, text="Push Package to Device", width=160, fg_color="#2E7D32", hover_color="#388E3C", state="disabled", command=self.start_threaded_adb_sideload)
+        self.btn_execute_install.pack(side="right")
+
     def generate_ios_deck_ui(self):
         lbl = ctk.CTkLabel(self.view_ios, text="iOS Operational Utilities Deck", font=ctk.CTkFont(size=18, weight="bold"))
         lbl.pack(anchor="w", padx=10, pady=(5, 5))
@@ -427,20 +450,103 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.btn_rebuild.configure(state="normal" if self.rebuild_dir else "disabled")
         self.btn_sign_only.configure(state="normal" if self.unsigned_apk_path else "disabled")
 
-    # -------------------------------------------------------------------------
-    # OPERATIONAL CORE BUSINESS WORKER EXECUTION NODES
-    # -------------------------------------------------------------------------
+    def browse_apk(self):
+        filepath = filedialog.askopenfilename(filetypes=[("APK Files", "*.apk")])
+        if filepath:
+            self.target_apk = filepath
+            self.lbl_apk.configure(text=os.path.basename(self.target_apk), text_color="#FFFFFF")
+            self.btn_decompile.configure(state="normal")
+
+    def browse_folder(self):
+        folderpath = filedialog.askdirectory(title="Select Target Decompiled Folder")
+        if folderpath:
+            norm_path = os.path.normpath(folderpath)
+            if not os.path.exists(os.path.join(norm_path, "apktool.yml")):
+                messagebox.showerror("Validation Error", "Invalid Target Directory!\n\nThe selected folder is missing the 'apktool.yml' file requirement.")
+                self.rebuild_dir = ""
+                self.lbl_dir.configure(text="No modified directory path selected.", text_color="#A0A0A5")
+                self.btn_rebuild.configure(state="disabled")
+                self.update_task_state("Invalid decompiled project folder structure.", "failed")
+            else:
+                self.rebuild_dir = norm_path
+                self.lbl_dir.configure(text=os.path.basename(self.rebuild_dir), text_color="#00E676")
+                self.btn_rebuild.configure(state="normal")
+                self.update_task_state("Modded directory structural validation passed.", "idle")
+
+    def browse_unsigned_apk(self):
+        filepath = filedialog.askopenfilename(filetypes=[("APK Files", "*.apk")])
+        if filepath:
+            self.unsigned_apk_path = filepath
+            self.lbl_sign_apk.configure(text=os.path.basename(self.unsigned_apk_path), text_color="#FFFFFF")
+            self.btn_sign_only.configure(state="normal")
+
+    def browse_install_target_apk(self):
+        filepath = filedialog.askopenfilename(filetypes=[("APK Files", "*.apk")])
+        if filepath:
+            self.install_target_apk = filepath
+            self.lbl_install_apk.configure(text=os.path.basename(self.install_target_apk), text_color="#00E676")
+            self.btn_execute_install.configure(state="normal")
+
+    def sync_custom_adb_cmd_string(self):
+        selected_mode = self.install_mode_var.get()
+        self.ent_custom_adb.delete(0, "end")
+        if selected_mode == "standard":
+            self.ent_custom_adb.insert(0, "adb install -r")
+        elif selected_mode == "downgrade":
+            self.ent_custom_adb.insert(0, "adb install -r -d")
+        elif selected_mode == "test":
+            self.ent_custom_adb.insert(0, "adb install -r -t")
+        elif selected_mode == "vending":
+            self.ent_custom_adb.insert(0, "adb shell pm install -i com.android.vending -r")
+
+    def start_threaded_adb_sideload(self):
+        if not self.install_target_apk: return
+        self.btn_execute_install.configure(state="disabled")
+        self.update_task_state("[ADB] Deploying custom compiled binary target...", "running")
+        threading.Thread(target=self.adb_sideload_worker, daemon=True).start()
+
+    def adb_sideload_worker(self):
+        try:
+            raw_cmd_string = self.ent_custom_adb.get().strip()
+            self.log(f"\n[*] Parsing execution query sequence parameters: {raw_cmd_string}")
+            cmd_parts = raw_cmd_string.split()
+            if "pm install" in raw_cmd_string:
+                filename = os.path.basename(self.install_target_apk)
+                remote_temp_path = f"/data/local/tmp/{filename}"
+                self.log(f"[*] Staging archive onto partition: {remote_temp_path}")
+                push_proc = subprocess.run(["adb", "push", self.install_target_apk, remote_temp_path], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+                if push_proc.returncode != 0:
+                    self.log(f"[-] Push staging fault: {push_proc.stderr}")
+                    self.update_task_state("Push target staging failed.", "failed")
+                    self.btn_execute_install.configure(state="normal"); return
+                exec_cmd = ["adb", "shell"] + cmd_parts[2:] + [remote_temp_path]
+                self.log(f"[*] Executing pipeline deployment engine command array: {' '.join(exec_cmd)}")
+                install_proc = subprocess.Popen(exec_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=SUBPROCESS_FLAGS)
+                for line in iter(install_proc.stdout.readline, ''): self.log(line.strip())
+                install_proc.stdout.close(); install_proc.wait()
+                subprocess.run(["adb", "shell", "rm", remote_temp_path], creationflags=SUBPROCESS_FLAGS)
+            else:
+                exec_cmd = cmd_parts + [self.install_target_apk]
+                self.log(f"[*] Calling standard installation deployment logic array: {' '.join(exec_cmd)}")
+                install_proc = subprocess.Popen(exec_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=SUBPROCESS_FLAGS)
+                for line in iter(install_proc.stdout.readline, ''): self.log(line.strip())
+                install_proc.stdout.close(); install_proc.wait()
+            self.log("\n--- Deployment Sequence Tasks Pipeline Completed ---")
+            self.update_task_state("Installation execution loop done.", "success")
+        except Exception as e:
+            self.log(f"[-] ADB Installer sequence dropped parameter fault: {str(e)}")
+            self.update_task_state("ADB Installation pipeline exception.", "failed")
+        self.btn_execute_install.configure(state="normal")
+
     def verify_and_download_dependencies(self):
         for pkg in self.pip_packages:
             if importlib.util.find_spec(pkg) is None:
                 try:
                     subprocess.check_call([sys.executable, "-m", "pip", "install", pkg] + KALI_FLAG, creationflags=SUBPROCESS_FLAGS)
-                except Exception as ex:
-                    self.log(f"[-] Pip module extraction fault: {str(ex)}")
+                except Exception as ex: self.log(f"[-] Pip module extraction fault: {str(ex)}")
 
         tools_dir = os.path.normpath("tools")
         os.makedirs(tools_dir, exist_ok=True)
-
         dependencies = {
             "apktool.jar": "https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar",
             "APKEditor.jar": "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar",
@@ -448,53 +554,37 @@ class NKCyberSuiteMobile(ctk.CTk):
             "apksigner.jar": "https://github.com/Aki-S/android-sdk-zipalign-apksigner/raw/master/apksigner.jar",
             "debug.keystore": "https://github.com/Aki-S/android-sdk-zipalign-apksigner/raw/master/debug.keystore"
         }
-        
         for name, url in dependencies.items():
             if url is None: continue  
             target_path = os.path.join(tools_dir, name)
             if not os.path.exists(target_path):
-                self.log(f"[*] Core component asset missing. Fetching secure block: {name}...")
                 try:
                     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                     with urllib.request.urlopen(req) as response, open(target_path, 'wb') as out_file:
                         shutil.copyfileobj(response, out_file)
-                    self.log(f"[+] Package synced: {name}")
-                except Exception as ex:
-                    self.log(f"[-] Dependency download failure: {name} -> {ex}")
-                    
-        self.log("[+] Environmental scanning tasks complete. Engine online and verified.")
+                except Exception: pass
         self.update_task_state("System Standby Ready", "idle")
         self.check_local_tools_inventory()
 
     def start_android_package_fetch(self):
         self.update_task_state("[ADB] Querying device database packages handles...", "running")
-        self.log("\n[*] Querying third-party apps over ADB database handles...")
         threading.Thread(target=self.adb_fetch_packages_worker, daemon=True).start()
 
     def adb_fetch_packages_worker(self):
         try:
             cmd = ["adb", "shell", "pm", "list", "packages", "-3"]
             process = subprocess.run(cmd, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
-            
             if process.returncode != 0:
-                self.log("[-] ADB Interface Failure: Confirm USB debugging connection.")
-                self.update_task_state("ADB Interface Link dropped.", "failed")
-                return
-
+                self.update_task_state("ADB Interface Link dropped.", "failed"); return
             self.discovered_android_apps.clear()
             dropdown_entries = []
             raw_packages = [line.replace("package:", "").strip() for line in process.stdout.splitlines() if line.startswith("package:")]
-
-            if not raw_packages:
-                self.log("[-] Active session open but device returned zero user packages entries.")
-                self.update_task_state("No third-party packages found.", "failed")
-                return
+            if not raw_packages: return
 
             for pkg in sorted(raw_packages):
                 info_cmd = f"adb shell \"dumpsys package {pkg} | grep -i 'label=' | head -n 1\""
                 info_proc = subprocess.run(info_cmd, capture_output=True, text=True, shell=True, creationflags=SUBPROCESS_FLAGS)
                 raw_info = info_proc.stdout.strip()
-                
                 app_label = raw_info.split("label=")[-1].strip().replace("'", "").replace('"', '') if "label=" in raw_info else pkg.split(".")[-1].capitalize()
                 display_string = f"{app_label} ({pkg})"
                 self.discovered_android_apps[display_string] = (pkg, app_label)
@@ -502,59 +592,41 @@ class NKCyberSuiteMobile(ctk.CTk):
 
             self.cbo_android_apps.configure(values=dropdown_entries)
             self.cbo_android_apps.set(dropdown_entries[0])
-            self.log(f"[+] Synced {len(dropdown_entries)} applications successfully.")
             self.update_task_state("Applications layout synced.", "success")
-        except Exception as e:
-            self.log(f"[-] ADB Process Exception: {str(e)}")
-            self.update_task_state("ADB Parser unexpected crash.", "failed")
+        except Exception: self.update_task_state("ADB Parser unexpected crash.", "failed")
 
     def start_android_apk_pull(self):
         selected_display = self.cbo_android_apps.get()
-        if not selected_display or "Scan" in selected_display:
-            messagebox.showwarning("Warning", "Run application device discovery first.")
-            return
-        
+        if not selected_display or "Scan" in selected_display: return
         target_pkg, app_label = self.discovered_android_apps[selected_display]
         parent_folder = filedialog.askdirectory(title="Choose Parent Storage Location Workspace")
         if not parent_folder: return
-
         safe_app_label = "".join(c for c in app_label if c.isalnum() or c in (" ", "_", "-")).strip()
         app_target_dir = os.path.normpath(os.path.join(parent_folder, safe_app_label))
-        
         self.update_task_state(f"[ADB] Extracting {safe_app_label} binaries folder tree...", "running")
         threading.Thread(target=self.adb_apk_pull_worker, args=(target_pkg, app_target_dir), daemon=True).start()
 
     def adb_apk_pull_worker(self, package_id, app_dir):
         try:
             os.makedirs(app_dir, exist_ok=True)
-            self.log(f"\n[*] Instantiating custom application workspace targets:\n -> {app_dir}")
-            
             path_proc = subprocess.run(["adb", "shell", "pm", "path", package_id], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
             remote_paths = [line.replace("package:", "").strip() for line in path_proc.stdout.splitlines() if line.startswith("package:")]
-
-            if not remote_paths:
-                self.log("[-] Path mapping vector parsing failed via PM shell subsystem.")
-                self.update_task_state("Package paths parsing failed.", "failed")
-                return
+            if not remote_paths: return
 
             base_local_path = ""
             for index, remote_path in enumerate(remote_paths):
                 remote_filename = remote_path.split("/")[-1]
                 local_filename = f"{package_id}.apk" if len(remote_paths) == 1 else remote_filename
-
                 temp_local_path = os.path.normpath(os.path.join(app_dir, f"temp_pull_{index}.apk"))
                 final_local_path = os.path.normpath(os.path.join(app_dir, local_filename))
 
                 pull_proc = subprocess.Popen(["adb", "pull", remote_path, temp_local_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=SUBPROCESS_FLAGS)
                 pull_proc.wait()
-
                 if os.path.exists(temp_local_path):
                     if os.path.exists(final_local_path): os.remove(final_local_path)
                     os.rename(temp_local_path, final_local_path)
-                    if local_filename in (f"{package_id}.apk", "base.apk"):
-                        base_local_path = final_local_path
+                    if local_filename in (f"{package_id}.apk", "base.apk"): base_local_path = final_local_path
 
-            self.log(f"[+] Pull Extraction Complete: Check target folder workspace.")
             if base_local_path and os.path.exists(base_local_path):
                 self.target_apk = base_local_path
                 self.lbl_apk.configure(text=os.path.basename(self.target_apk), text_color="#00E676")
@@ -581,60 +653,19 @@ class NKCyberSuiteMobile(ctk.CTk):
             folder_name = os.path.basename(self.selected_merge_dir)
             parent_dir = os.path.dirname(self.selected_merge_dir)
             final_output_path = os.path.normpath(os.path.join(parent_dir, f"{folder_name}_merged.apk"))
-            
-            self.log(f"\n[*] Calling APKEditor merge module dependencies against: {self.selected_merge_dir}")
             merge_cmd = ["java", "-jar", "tools/APKEditor.jar", "m", "-i", self.selected_merge_dir, "-o", final_output_path]
-            
             merge_proc = subprocess.Popen(merge_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=SUBPROCESS_FLAGS)
             merge_proc.wait()
-
             if os.path.exists(final_output_path):
                 self.target_apk = final_output_path
                 self.lbl_apk.configure(text=os.path.basename(self.target_apk), text_color="#00E676")
                 self.btn_decompile.configure(state="normal")
-                self.log(f"[+] Assembly Forged standalone package ready.")
                 self.update_task_state("App bundles unified successfully.", "success")
-                messagebox.showinfo("Merge Complete", f"Compiled cleanly into standalone structure!\n{final_output_path}")
-            else:
-                self.update_task_state("Unified archive generation parameters dropped.", "failed")
-        except Exception as e:
-            self.log(f"[-] Merger runtime pipeline error: {str(e)}")
-            self.update_task_state("APKEditor sub-process engine error.", "failed")
-
-    def browse_apk(self):
-        filepath = filedialog.askopenfilename(filetypes=[("APK Files", "*.apk")])
-        if filepath:
-            self.target_apk = filepath
-            self.lbl_apk.configure(text=os.path.basename(self.target_apk), text_color="#FFFFFF")
-            self.btn_decompile.configure(state="normal")
-
-    def browse_folder(self):
-        folderpath = filedialog.askdirectory(title="Select Target Decompiled Folder")
-        if folderpath:
-            norm_path = os.path.normpath(folderpath)
-            if not os.path.exists(os.path.join(norm_path, "apktool.yml")):
-                messagebox.showerror("Validation Error", "Invalid Target Directory!\n\nThe selected folder is missing the 'apktool.yml' signature parameter configuration file required for reassembly workflows.")
-                self.rebuild_dir = ""
-                self.lbl_dir.configure(text="No modified directory path selected.", text_color="#A0A0A5")
-                self.btn_rebuild.configure(state="disabled")
-                self.update_task_state("Invalid decompiled project folder structure.", "failed")
-            else:
-                self.rebuild_dir = norm_path
-                self.lbl_dir.configure(text=os.path.basename(self.rebuild_dir), text_color="#00E676")
-                self.btn_rebuild.configure(state="normal")
-                self.update_task_state("Modded directory structural validation passed.", "idle")
-
-    def browse_unsigned_apk(self):
-        filepath = filedialog.askopenfilename(filetypes=[("APK Files", "*.apk")])
-        if filepath:
-            self.unsigned_apk_path = filepath
-            self.lbl_sign_apk.configure(text=os.path.basename(self.unsigned_apk_path), text_color="#FFFFFF")
-            self.btn_sign_only.configure(state="normal")
+        except Exception : self.update_task_state("APKEditor sub-process engine error.", "failed")
 
     def start_decompile(self):
         self.btn_decompile.configure(state="disabled")
         self.update_task_state("[Apktool] Decompiling package assets directory structure...", "running")
-        self.log("\n[*] Handing operation context off to Apktool execution nodes...")
         output_dir = self.target_apk.replace(".apk", "_decompiled")
         cmd = ["java", "-jar", "tools/apktool.jar", "d", self.target_apk, "-o", output_dir, "-f"]
         threading.Thread(target=self.execute_sub_process, args=(cmd, "Decompilation Task Complete"), daemon=True).start()
@@ -654,40 +685,23 @@ class NKCyberSuiteMobile(ctk.CTk):
             process = subprocess.Popen(command_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=SUBPROCESS_FLAGS)
             for line in iter(process.stdout.readline, ''): self.log(line.strip())
             process.stdout.close(); process.wait()
-            if process.returncode == 0:
-                self.log(f"\n--- {terminal_success_msg} ---")
-                self.update_task_state("Operation complete.", "success")
-            else:
-                self.log("\n--- ENGINE ERROR EXECUTION TERMINATED ---")
-                self.update_task_state("Task process execution rejected.", "failed")
-        except Exception as ex: 
-            self.log(f"[-] Unexpected failure mapping tasks: {str(ex)}")
-            self.update_task_state("Infrastructure subprocess system crash.", "failed")
+            if process.returncode == 0: self.update_task_state("Operation complete.", "success")
+            else: self.update_task_state("Task process execution rejected.", "failed")
+        except Exception: self.update_task_state("Infrastructure subprocess system crash.", "failed")
         self.refresh_interface_locks()
 
     def standalone_sign_pipeline_worker(self):
         base_name = os.path.splitext(self.unsigned_apk_path)[0]
         aligned_apk = f"{base_name}_aligned.apk"
         final_signed_apk = f"{base_name}_SIGNED.apk"
-
         zipalign_bin = "tools/zipalign" if IS_LINUX else "tools/zipalign.exe"
         subprocess.run([zipalign_bin, "-p", "-f", "4", self.unsigned_apk_path, aligned_apk], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=SUBPROCESS_FLAGS)
-
-        if not os.path.exists(aligned_apk):
-            self.log("[-] Error: Optimization alignment process tracking crash.")
-            self.update_task_state("Zipalign boundary optimization rejected.", "failed")
-            self.refresh_interface_locks(); return
-
+        if not os.path.exists(aligned_apk): self.refresh_interface_locks(); return
         cmd_sign = ["java", "-jar", "tools/apksigner.jar", "sign", "--ks", "tools/debug.keystore", "--ks-pass", "pass:android", "--out", final_signed_apk, aligned_apk]
         proc = subprocess.run(cmd_sign, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
-        
         if proc.returncode == 0:
-            self.log(f"\n--- SUCCESS! Standalone Build Certified: {final_signed_apk} ---")
             self.update_task_state("Manual package signed successfully.", "success")
             if os.path.exists(aligned_apk): os.remove(aligned_apk)
-        else:
-            self.log("[-] Error: Keyring validation structures signature failed.")
-            self.update_task_state("Apksigner cryptographic signature rejected.", "failed")
         self.refresh_interface_locks()
 
     def rebuild_pipeline_worker(self):
@@ -695,27 +709,15 @@ class NKCyberSuiteMobile(ctk.CTk):
         output_dir_path = os.path.dirname(os.path.normpath(self.rebuild_dir))
         unsigned_apk = os.path.join(output_dir_path, f"{base_name}_unsigned.apk")
         aligned_apk = os.path.join(output_dir_path, f"{base_name}_MODDED.apk")
-        
         subprocess.run(["java", "-jar", "tools/apktool.jar", "b", self.rebuild_dir, "-o", unsigned_apk], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=SUBPROCESS_FLAGS)
-        
-        if not os.path.exists(unsigned_apk):
-            self.log("[-] Error: Rebuild failed. Review Smali constraints.")
-            self.update_task_state("Apktool reassembly compilation error.", "failed")
-            self.refresh_interface_locks(); return
-
+        if not os.path.exists(unsigned_apk): self.refresh_interface_locks(); return
         zipalign_bin = "tools/zipalign" if IS_LINUX else "tools/zipalign.exe"
         subprocess.run([zipalign_bin, "-p", "-f", "4", unsigned_apk, aligned_apk], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=SUBPROCESS_FLAGS)
-
         cmd_sign = ["java", "-jar", "tools/apksigner.jar", "sign", "--ks", "tools/debug.keystore", "--ks-pass", "pass:android", aligned_apk]
         proc = subprocess.run(cmd_sign, capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
-        
         if proc.returncode == 0:
-            self.log(f"\n--- SUCCESS! Production Modded Signed Target Ready Asset ready ---")
             self.update_task_state("Modded bundle recompiled and signed.", "success")
             if os.path.exists(unsigned_apk): os.remove(unsigned_apk)
-        else:
-            self.log("[-] Error: Signing parameter injection sequence was rejected.")
-            self.update_task_state("Modded package cryptographic validation failed.", "failed")
         self.refresh_interface_locks()
 
     def start_ios_app_fetch(self):
@@ -726,16 +728,14 @@ class NKCyberSuiteMobile(ctk.CTk):
 
     def ios_fetch_apps_worker(self):
         ip = self.ent_ios_ip.get().strip(); user = self.ent_ios_user.get().strip(); password = self.ent_ios_pass.get()
-        self.log(f"\n[*] Opening secure network transport layer: {user}@{ip}...")
         ssh = paramiko.SSHClient(); ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
         try:
             ssh.connect(ip, username=user, password=password, timeout=10)
             cmd = (
                 r'cd /var/containers/Bundle/Application/ && '
                 r'for d in *; do '
                 r'  if [ -d "$d" ]; then '
-                r'    app=$(ls -d "$d"/*.app 2>/dev/null | head -n 1 | xargs basename); '
+                r'    app=$(basename "$(ls -d "$d"/*.app 2>/dev/null | head -n 1)"); '
                 r'    if [ ! -z "$app" ]; then '
                 r'      name=$(/usr/libexec/PlistBuddy -c "Print CFBundleDisplayName" "$d/$app/Info.plist" 2>/dev/null); '
                 r'      if [ -z "$name" ]; then name=$(/usr/libexec/PlistBuddy -c "Print CFBundleName" "$d/$app/Info.plist" 2>/dev/null); fi; '
@@ -748,27 +748,21 @@ class NKCyberSuiteMobile(ctk.CTk):
             stdin, stdout, stderr = ssh.exec_command(cmd)
             output = stdout.read().decode("utf-8")
             self.discovered_ios_apps.clear(); app_names = []
-
             for line in output.splitlines():
                 if "MATCH|" in line:
                     parts = line.split("|")
                     if len(parts) == 4:
                         _, app_name, uuid, app_folder = parts
-                        self.discovered_ios_apps[app_name.strip()] = (uuid.strip(), app_folder.strip())
-                        app_names.append(app_name.strip())
-
+                        sanitized_app_name = app_name.strip().replace('\\', '')
+                        sanitized_folder = app_folder.strip().replace('\\', '')
+                        self.discovered_ios_apps[sanitized_app_name] = (uuid.strip(), sanitized_folder)
+                        app_names.append(sanitized_app_name)
             if app_names:
                 self.cbo_ios_apps.configure(values=sorted(app_names))
                 self.cbo_ios_apps.set(sorted(app_names)[0])
-                self.log(f"[+] Synced {len(app_names)} live remote iOS application profiles.")
                 self.update_task_state("iOS App bundles decrypted database synced.", "success")
-            else:
-                self.update_task_state("Zero valid decrypted containers located.", "failed")
-        except Exception as e:
-            self.log(f"[-] Transport Connection Failure: {str(e)}")
-            self.update_task_state("SSH Authentication handshake failed.", "failed")
-        finally:
-            ssh.close(); self.btn_fetch_apps.configure(state="normal")
+        except Exception: self.update_task_state("SSH Authentication handshake failed.", "failed")
+        finally: ssh.close(); self.btn_fetch_apps.configure(state="normal")
 
     def ios_browse_dest(self):
         folder = filedialog.askdirectory(title="Choose Local Destination Workspace Folder")
@@ -788,33 +782,37 @@ class NKCyberSuiteMobile(ctk.CTk):
         ip = self.ent_ios_ip.get().strip(); user = self.ent_ios_user.get().strip(); password = self.ent_ios_pass.get()
         app_uuid, app_folder_name = self.discovered_ios_apps[app_name]
         ssh = paramiko.SSHClient(); ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
         try:
             ssh.connect(ip, username=user, password=password)
             remote_app_path = f"/var/containers/Bundle/Application/{app_uuid}/{app_folder_name}"
-            temp_dir = os.path.join(self.ios_dest_dir, "ios_temp")
-            payload_dir = os.path.join(temp_dir, "Payload")
-
-            if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+            base_temp_dir = os.path.abspath(os.path.join(self.ios_dest_dir, "ios_temp"))
+            payload_dir = os.path.join(base_temp_dir, "Payload")
+            if os.path.exists(base_temp_dir): shutil.rmtree(base_temp_dir)
             os.makedirs(payload_dir, exist_ok=True)
 
-            with SCPClient(ssh.get_transport()) as scp: scp.get(remote_app_path, local_path=payload_dir, recursive=True)
+            target_scp_dir = payload_dir
+            if sys.platform == "win32" and not target_scp_dir.startswith("\\\\?\\"):
+                target_scp_dir = "\\\\?\\" + target_scp_dir.replace("/", "\\")
+
+            self.log(f"[*] Copying payload assets recursively down to tracking location:\n -> {target_scp_dir}")
+            with SCPClient(ssh.get_transport()) as scp:
+                scp.get(remote_app_path, local_path=target_scp_dir, recursive=True)
 
             safe_filename = "".join(c for c in app_name if c.isalnum() or c in (" ", "_", "-")).strip()
-            ipa_output_path = os.path.join(self.ios_dest_dir, f"{safe_filename}.ipa")
+            ipa_output_path = os.path.abspath(os.path.join(self.ios_dest_dir, f"{safe_filename}.ipa"))
 
             with zipfile.ZipFile(ipa_output_path, "w", zipfile.ZIP_DEFLATED) as ipa_zip:
-                for root, dirs, files in os.walk(temp_dir):
+                for root, dirs, files in os.walk(base_temp_dir):
                     for file in files:
                         full_fp = os.path.join(root, file)
-                        ipa_zip.write(full_fp, os.path.relpath(full_fp, temp_dir))
+                        ipa_zip.write(full_fp, os.path.relpath(full_fp, base_temp_dir))
 
-            shutil.rmtree(temp_dir)
+            shutil.rmtree(base_temp_dir)
             self.log(f"\n--- SUCCESS! Final Production IPA Package Forged ---\n -> {ipa_output_path}")
             self.update_task_state("Decrypted IPA compiled successfully.", "success")
             messagebox.showinfo("Success", f"IPA built successfully:\n{ipa_output_path}")
-        except Exception as e: 
-            self.log(f"[-] Packaging workflow runtime fault: {str(e)}")
+        except Exception as e:
+            self.log(f"[-] Packaging workflow runtime fault exception trace: {str(e)}")
             self.update_task_state("Secure transport copy block sequence failure.", "failed")
         finally: ssh.close(); self.btn_build_ipa.configure(state="normal")
 
@@ -827,4 +825,3 @@ if __name__ == "__main__":
         print("[+] Window closed cleanly.")
     except Exception as error:
         print(f"\n[-] ENGINE RUNTIME CRASH LOG:\n{error}\n")
-        import traceback; traceback.print_exc()
