@@ -41,17 +41,25 @@ The following framework layers are validated and maintained automatically by the
 ---
 
 ## 🚀 Installation & Launch
-
-### 1. Clone the Workspace
 ```bash
-git clone [https://github.com/nileshkale12/MobiSuite-Mobile.git](https://github.com/nileshkale12/MobiSuite-Mobile.git)
-cd NK-CyberSuite-Mobile
+## In Kali Setup Guide
 
-chmod +x Launch_Kali.sh
-./Launch_Kali.sh
+## 1. Clone the Workspace In Kali
+
+Step 1: Clone the Workspace In Kali with below cmd
+      git clone https://github.com/nileshkale12/MobiSuite-Mobile.git
+
+Step 2: Navigate to below dir
+      cd MobiSuite-Mobile
+
+Step 3: Give permission to below file to run the tool
+      chmod +x Launch_Kali.sh
+
+Step 4: Run below cmd to lunch the tools
+      python ./auto_apk_1.0.py  or python3 auto_apk_1.0.py 
 ---
 
-## 🚀 Quick Launch Guide
+## 🚀 In Windows 
 
 ### 🪟 Windows Deployment (No Admin Access Required)
 1. Ensure your system has **Python 3** and **Java 17+ (JRE/JDK)** installed.
