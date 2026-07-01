@@ -3,6 +3,9 @@
 MobiSuite is a cross-platform, multi-threaded GUI pipeline engine designed for mobile application security analysts, penetration testers, and reverse engineers. It replaces complex, repetitive command-line workflows with a streamlined, click-driven interface to automate the extraction, modification, assembly, signing, and deployment of Android (APK/APKS) and decrypted iOS (IPA) application binaries.
 
 ![Downloads](https://img.shields.io/github/downloads/nileshkale12/MobiSuite-Mobile/total?style=for-the-badge&color=00E5FF)
+<img width="1366" height="721" alt="image" src="https://github.com/user-attachments/assets/6e0e0af3-f4f7-40be-ab71-754266b805b6" />
+
+
 ---
 
 ## 🚀 What Our Tool Does & How It Works
