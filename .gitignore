@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+captures/
+*.har
+tools/frida-server-cache/
+.claude/

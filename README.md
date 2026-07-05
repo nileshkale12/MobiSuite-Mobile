@@ -1,10 +1,6 @@
-# 💎 MobiSuite v1.0.0
+# 💎 MobiSuite v1.3.0
 
 MobiSuite is a cross-platform, multi-threaded GUI pipeline engine designed for mobile application security analysts, penetration testers, and reverse engineers. It replaces complex, repetitive command-line workflows with a streamlined, click-driven interface to automate the extraction, modification, assembly, signing, and deployment of Android (APK/APKS) and decrypted iOS (IPA) application binaries.
-
-![Downloads](https://img.shields.io/github/downloads/nileshkale12/MobiSuite-Mobile/total?style=for-the-badge&color=00E5FF)
-<img width="1366" height="721" alt="image" src="https://github.com/user-attachments/assets/6e0e0af3-f4f7-40be-ab71-754266b805b6" />
-
 
 ---
 
@@ -32,6 +28,10 @@ MobiSuite bridges the gap between raw command-line tools and modern GUI accessib
   * *Windows Long-Path Bypass:* Natively utilizes Windows Extended Paths (`\\?\`) to safely bypass the strict 260-character Windows folder limit during deep recursive file system pulls, preventing crashes when saving to nested OneDrive or enterprise project folders.
 * **Live Environmental Auditing:** 
   Actively monitors connected physical hardware via background ADB/SSH transport loops, tracking device IDs and IP endpoints dynamically on a unified bottom HUD.
+* **Bug Bounty Recon Toolkit (Static Analysis):** 
+  A dedicated deck for mobile bug bounty and MobSF-style static workflows built on top of a decompiled apktool project. Extracts the manifest attack surface (exported components, dangerous permissions, deep links), mines the smali/res/assets tree for hardcoded URLs, IP addresses, leaked API keys/secrets, and MobSF-style code vulnerability patterns (weak crypto, insecure WebView config, broken TrustManager/HostnameVerifier, insecure randomness), analyzes the APK's signing certificate (v1/v2/v3/v4 scheme verification, signer DN, debug-cert detection) and file hashes (MD5/SHA1/SHA256), and matches discovered endpoints against a pasted bug bounty program scope list — then exports the whole thing as a Markdown report.
+* **Dynamic Testing Toolkit (Frida):** 
+  Brings real runtime instrumentation to a rooted Android device or emulator. Auto-detects the device architecture and root status, downloads and deploys a matching `frida-server` build, then attaches to any installed app to run curated SSL-pinning-bypass and root-detection-bypass scripts — or load your own custom Frida `.js` script for bespoke bypass logic. (Traffic interception is intentionally out of scope here — pair MobiSuite with Burp Suite or your interception tool of choice.)
 
 ---
 
@@ -52,12 +52,14 @@ MobiSuite maps and isolates the following industry-standard utility binaries int
 | `APKEditor.jar` | Merges split bundle architectures (`base.apk` + configurations) | Step 0b Android Pipeline |
 | `zipalign` | Provides crucial 4-byte boundary alignment optimizations for resources | Production Alignment Task |
 | `apksigner.jar` | Signs APKs with v1, v2, v3, and v4 cryptographic validation schemes | Standalone & Mod Rebuild |
+| `frida-server` | Runtime instrumentation daemon, version-matched to the local `frida` package and pushed to the device on demand (cached under `tools/frida-server-cache/`, not bundled) | Dynamic Testing Deck |
 
 ### Embedded Python Extensions
 The following framework layers are validated and maintained automatically by the environment controller upon suite initialization:
 * `customtkinter` — High-contrast premium UI rendering layer supporting scrollable window limits.
 * `paramiko` — Low-level SSHv2 protocol transport channel management.
 * `scp` — Secure Copy Protocol wrapper node for encrypted asset scraping and recursive network pulls.
+* `frida` — Python bindings for runtime instrumentation (SSL pinning / root detection bypass / custom scripts).
 
 ## 🚀 Installation & Launch
 ```
@@ -73,7 +75,7 @@ Step 3: Install foundational platform tools
       sudo apt update && sudo apt install default-jdk adb zipalign apksigner -y
 
 Step 4: Initialize Python required dependencies
-      python3 -m pip install customtkinter paramiko scp cryptography
+      python3 -m pip install customtkinter paramiko scp cryptography frida
 
 Step 5: Give permission to the below file to run the tool
       chmod +x Launch_Kali.sh
@@ -97,7 +99,7 @@ Step 3: Navigate to the below directory
       cd MobiSuite-Mobile
 
 Step 4: Initialize Python required dependencies Open your command prompt (cmd) inside the folder and run: 
-      python -m pip install customtkinter paramiko scp cryptography pyinstaller
+      python -m pip install customtkinter paramiko scp cryptography pyinstaller frida
 
 Step 5: Run the below command to launch the tool
 Double-click the Launch_Windows.bat file to boot the Control Center, or run it directly in the terminal:
@@ -177,7 +179,64 @@ MobiSuite divides its capabilities into logical workflows. Follow these operatio
 
 ---
 
-### 📟 3. Live Terminal Logs & Settings
+### 🎯 3. Bug Bounty Recon Toolkit (Static Analysis)
+
+#### **Step 1: Recon Target - Decompiled Project Folder**
+* **What it does:** Points the recon engine at an apktool-decompiled project (validated by the presence of `apktool.yml`).
+* **How to use it:**
+  1. Click **Use Last Decompiled Output** to automatically target whatever you just decompiled in the Android tab's Step 1, or click **Select Decompiled Folder** to manually browse to any existing `_decompiled` project directory.
+
+#### **Step 2: APK Signature & Hash Analysis**
+* **What it does:** Runs `apksigner verify --print-certs` against the active target APK to report v1/v2/v3/v4 signing scheme verification and the signer certificate's DN (flagging the well-known Android debug certificate as a warning), plus MD5/SHA1/SHA256 file hashes.
+* **How to use it:**
+  1. Click **Analyze Signature & Hashes** (works on the currently loaded/pulled/merged APK — no decompiled folder required).
+
+#### **Step 3: Manifest Attack Surface Extraction**
+* **What it does:** Parses `AndroidManifest.xml` to surface what an attacker (or a bounty hunter) would look at first: `debuggable`/`allowBackup`/`usesCleartextTraffic` flags, dangerous permissions, explicitly exported activities/services/receivers/providers, components with an intent-filter but no explicit `android:exported` (flagged as an implicit-export warning), and deep link scheme/host/pathPrefix combinations.
+* **How to use it:**
+  1. Click **Extract Attack Surface**. Results populate the structured findings box at the bottom of the tab.
+
+#### **Step 4: Endpoint, Secret & Code Vulnerability Scan (Decompiled Source)**
+* **What it does:** Walks the decompiled `smali`/`res`/`assets` tree (skipping image-heavy resource folders and oversized files) and regex-mines it for hardcoded URLs, IP addresses, known secret formats (Google API keys, AWS access keys, Firebase database URLs, Slack tokens, JWTs, generic `api_key=`/`secret=`/`access_token=` strings), and MobSF-style code vulnerability patterns: weak hashing (MD5/SHA-1), weak ciphers (DES/ECB), insecure PRNG (`java.util.Random`), risky WebView configuration (`setJavaScriptEnabled`, `addJavascriptInterface`, file-access flags), custom `X509TrustManager`/`HostnameVerifier` implementations (flagged for manual review), and external storage read/write.
+* **How to use it:**
+  1. Click **Scan Decompiled Source**. Progress streams to the Live Terminal Logs tab; the deduplicated results populate the findings box.
+
+#### **Step 5: Bug Bounty Scope Matcher**
+* **What it does:** Cross-references every discovered URL's hostname against a bug bounty program's in-scope domain list, so you immediately know which endpoints found inside the app are actually worth pursuing.
+* **How to use it:**
+  1. Paste the program's in-scope domains into the text box, one per line — use `*.example.com` to match a domain and all its subdomains, or a bare domain for an exact-host match.
+  2. Click **Match Discovered URLs to Scope** to split findings into in-scope vs. out-of-scope/informational.
+
+#### **Step 6: Export Recon Report**
+* **What it does:** Writes the full structured findings (signature/hashes, manifest attack surface, endpoints/secrets/code vulnerabilities, scope match results) out as a Markdown file for your write-up.
+* **How to use it:**
+  1. Click **Export Markdown Report** and choose a save location.
+
+---
+
+### 🕵 4. Dynamic Testing Toolkit (Frida)
+
+> **Requires a rooted device or rooted emulator.** Only use these features against apps you are authorized to test. Traffic interception is intentionally not part of this tool — pair MobiSuite with Burp Suite (or your interceptor of choice) for that.
+>
+> **Magisk users:** having `su`/Magisk installed is not enough on its own — ADB shell must be explicitly granted superuser access. Open the Magisk app on the device, go to Superuser settings, and make sure ADB/Shell requests are allowed (either set the policy to grant automatically, or approve the on-screen prompt the first time `su` runs). Until this is done, "Detect Device Environment" will correctly report `su DENIED` rather than silently failing.
+
+#### **Step 1: Device Environment & Frida Server**
+* **What it does:** Detects the connected device's CPU architecture, Android version, and root/`su` status. Once root is confirmed, downloads the `frida-server` build matching your installed `frida` Python version and the device's architecture, pushes it to `/data/local/tmp/`, and launches it as root.
+* **How to use it:**
+  1. Click **Detect Device Environment** first — confirm root shows as granted before continuing.
+  2. Click **Deploy Frida Server**.
+
+#### **Step 2: Target Application**
+* **What it does:** Lists installed third-party apps on the device, the same way the Android tab's ADB puller does.
+* **How to use it:** Click **Scan Installed Apps** and select your target from the dropdown.
+
+#### **Step 3: Bypass Script Runner**
+* **What it does:** Attaches to (or spawns) the selected app via Frida and loads curated bypass scripts: **SSL Pinning Bypass** (hooks OkHttp `CertificatePinner`, Android's `TrustManagerImpl`, and WebView SSL error handling) and **Root Detection Bypass** (hooks `File.exists`, `Runtime.exec`, `PackageManager`, `Build.TAGS`, and `PATH` checks against common root/Magisk indicators). You can also **Load Custom Script...** to point at your own Frida `.js` file and run it standalone via **Run Custom Script** — useful for bespoke bypass logic beyond the two built-ins.
+* **How to use it:** Click **Run SSL Pinning Bypass**, **Run Root Detection Bypass**, **Run Both**, or load and run your own script. Script log output streams into the results console below. Click **Detach** when finished.
+
+---
+
+### 📟 5. Live Terminal Logs & Settings
 
 * **Live Terminal Logs Tab:** Open this dashboard tab at any time to inspect raw command-line stdout strings, active connection errors, sub-tool initialization lines, or script diagnostics.
 * **Environment Settings Tab:** Check this screen to audit your local directory inventory setup status map. If an underlying binary component shows a red `🔴 MISSING` status badge, click **Force System Sync & Repair** to auto-download and repair the local repository environment block dependencies.
