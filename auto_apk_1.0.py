@@ -150,7 +150,7 @@ class NKCyberSuiteMobile(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.title("MobiSuite v1.2.0")
+        self.title("MobiSuite v1.3.0")
         self.geometry("1100x920")
         self.minsize(1000, 840)
         
@@ -234,7 +234,7 @@ class NKCyberSuiteMobile(ctk.CTk):
                                               command=lambda: self.switch_deck_context("dynamic"))
         self.btn_nav_dynamic.pack(padx=15, pady=5, fill="x")
 
-        copyright_lbl = ctk.CTkLabel(self.sidebar, text="© 2026 Nilesh Kale\nAll Rights Reserved\nVersion 1.2.0", font=ctk.CTkFont(size=10), text_color="gray", justify="center")
+        copyright_lbl = ctk.CTkLabel(self.sidebar, text="© 2026 Nilesh Kale\nAll Rights Reserved\nVersion 1.3.0", font=ctk.CTkFont(size=10), text_color="gray", justify="center")
         copyright_lbl.pack(side="bottom", pady=15)
 
         # ---------------------------------------------------------------------
