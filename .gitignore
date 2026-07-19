@@ -4,3 +4,5 @@ captures/
 *.har
 tools/frida-server-cache/
 .claude/
+frida_scripts/generated/
+*.log

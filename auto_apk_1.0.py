@@ -51,6 +51,8 @@ try:
 except ImportError:
     frida = None
 
+from tools import flutter_ssl_bypass
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -100,6 +102,8 @@ FRIDA_SERVER_RELEASE_URL_TMPL = "https://github.com/frida/frida/releases/downloa
 
 SSL_PINNING_BYPASS_SCRIPT = os.path.normpath("frida_scripts/ssl_pinning_bypass.js")
 ROOT_DETECTION_BYPASS_SCRIPT = os.path.normpath("frida_scripts/root_detection_bypass.js")
+FLUTTER_BYPASS_OUTPUT_DIR = os.path.normpath("frida_scripts/generated")
+CAPTURE_TRAFFIC_OUTPUT_DIR = os.path.normpath("frida_scripts/generated")
 
 # ---------------------------------------------------------------------
 # MOBSF-STYLE STATIC CODE VULNERABILITY RULES
@@ -186,6 +190,10 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.frida_script = None
         self.frida_server_process = None
         self.custom_frida_script_path = ""
+        self.lspd_module_apk_path = ""
+        self.flutter_bypass_apk_path = ""
+        self.flutter_hit_count = 0
+        self.flutter_watchdog_timer = None
 
         ext = ".exe" if sys.platform == "win32" else ""
         self.bin_names = [f"adb{ext}", "apktool.jar", "APKEditor.jar", f"zipalign{ext}", "apksigner.jar"]
@@ -214,25 +222,30 @@ class NKCyberSuiteMobile(ctk.CTk):
                                         command=lambda: self.switch_deck_context("ios"))
         self.btn_nav_ios.pack(padx=15, pady=5, fill="x")
 
-        self.btn_nav_settings = ctk.CTkButton(self.sidebar, text="⚙️ Environment Settings", 
-                                            fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
-                                            command=lambda: self.switch_deck_context("settings"))
-        self.btn_nav_settings.pack(padx=15, pady=5, fill="x")
-
-        self.btn_nav_console = ctk.CTkButton(self.sidebar, text="📟 Live Terminal Logs", 
-                                            fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
-                                            command=lambda: self.switch_deck_context("console"))
-        self.btn_nav_console.pack(padx=15, pady=5, fill="x")
-
         self.btn_nav_recon = ctk.CTkButton(self.sidebar, text="🎯 Bug Bounty Recon",
                                             fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
                                             command=lambda: self.switch_deck_context("recon"))
         self.btn_nav_recon.pack(padx=15, pady=5, fill="x")
 
-        self.btn_nav_dynamic = ctk.CTkButton(self.sidebar, text="🕵 Dynamic Testing",
+        self.btn_nav_flutter_bypass = ctk.CTkButton(self.sidebar, text="🦋 Flutter Application Bypass",
                                               fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
-                                              command=lambda: self.switch_deck_context("dynamic"))
-        self.btn_nav_dynamic.pack(padx=15, pady=5, fill="x")
+                                              command=lambda: self.switch_deck_context("flutter_bypass"))
+        self.btn_nav_flutter_bypass.pack(padx=15, pady=5, fill="x")
+
+        self.btn_nav_native_bypass = ctk.CTkButton(self.sidebar, text="🔒 Native Application Bypass",
+                                              fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
+                                              command=lambda: self.switch_deck_context("native_bypass"))
+        self.btn_nav_native_bypass.pack(padx=15, pady=5, fill="x")
+
+        self.btn_nav_console = ctk.CTkButton(self.sidebar, text="📟 Live Terminal Logs",
+                                            fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
+                                            command=lambda: self.switch_deck_context("console"))
+        self.btn_nav_console.pack(padx=15, pady=5, fill="x")
+
+        self.btn_nav_settings = ctk.CTkButton(self.sidebar, text="⚙️ Environment Settings",
+                                            fg_color="transparent", hover_color="#3D3F4D", height=40, anchor="w",
+                                            command=lambda: self.switch_deck_context("settings"))
+        self.btn_nav_settings.pack(padx=15, pady=5, fill="x")
 
         copyright_lbl = ctk.CTkLabel(self.sidebar, text="© 2026 Nilesh Kale\nAll Rights Reserved\nVersion 1.3.0", font=ctk.CTkFont(size=10), text_color="gray", justify="center")
         copyright_lbl.pack(side="bottom", pady=15)
@@ -277,14 +290,27 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.view_ios = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
         self.view_settings = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
         self.view_recon = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
-        self.view_dynamic = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
+        self.view_native_bypass = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
+        self.view_flutter_bypass = ctk.CTkScrollableFrame(self.main_deck, fg_color="transparent", label_text="")
         self.view_console = ctk.CTkFrame(self.main_deck, fg_color="transparent")
+
+        # Shared cross-tab state for the Flutter/Native bypass split: one physical Frida
+        # server + one physical iptables/Burp-routing state on the device, mirrored into
+        # whichever tab(s) display it so nothing gets deployed twice or drifts out of sync.
+        self.lbl_device_env_widgets = []
+        self.lbl_frida_server_status_widgets = []
+        self.lbl_burp_status_widgets = []
+        self.burp_results_boxes = []
+        self.target_app_combo_widgets = []
+        self.frida_attach_results_boxes = []
+        self.burp_port_var = tk.StringVar(value="8080")
 
         self.generate_android_deck_ui()
         self.generate_ios_deck_ui()
         self.generate_settings_deck_ui()
         self.generate_recon_deck_ui()
-        self.generate_dynamic_deck_ui()
+        self.generate_flutter_bypass_deck_ui()
+        self.generate_native_bypass_deck_ui()
         self.generate_console_deck_ui()
         
         self.switch_deck_context("android")
@@ -313,13 +339,15 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.btn_nav_settings.configure(fg_color="transparent", text_color="#A0A0A5")
         self.btn_nav_console.configure(fg_color="transparent", text_color="#A0A0A5")
         self.btn_nav_recon.configure(fg_color="transparent", text_color="#A0A0A5")
-        self.btn_nav_dynamic.configure(fg_color="transparent", text_color="#A0A0A5")
+        self.btn_nav_native_bypass.configure(fg_color="transparent", text_color="#A0A0A5")
+        self.btn_nav_flutter_bypass.configure(fg_color="transparent", text_color="#A0A0A5")
 
         self.view_android.pack_forget()
         self.view_ios.pack_forget()
         self.view_settings.pack_forget()
         self.view_recon.pack_forget()
-        self.view_dynamic.pack_forget()
+        self.view_native_bypass.pack_forget()
+        self.view_flutter_bypass.pack_forget()
         self.view_console.pack_forget()
 
         if target_deck == "android":
@@ -338,9 +366,12 @@ class NKCyberSuiteMobile(ctk.CTk):
         elif target_deck == "recon":
             self.btn_nav_recon.configure(fg_color="#2A2B36", text_color="#FFFFFF")
             self.view_recon.pack(fill="both", expand=True, padx=5, pady=5)
-        elif target_deck == "dynamic":
-            self.btn_nav_dynamic.configure(fg_color="#2A2B36", text_color="#FFFFFF")
-            self.view_dynamic.pack(fill="both", expand=True, padx=5, pady=5)
+        elif target_deck == "native_bypass":
+            self.btn_nav_native_bypass.configure(fg_color="#2A2B36", text_color="#FFFFFF")
+            self.view_native_bypass.pack(fill="both", expand=True, padx=5, pady=5)
+        elif target_deck == "flutter_bypass":
+            self.btn_nav_flutter_bypass.configure(fg_color="#2A2B36", text_color="#FFFFFF")
+            self.view_flutter_bypass.pack(fill="both", expand=True, padx=5, pady=5)
 
     def generate_console_deck_ui(self):
         lbl = ctk.CTkLabel(self.view_console, text="Core Diagnostics & Assessment Stream Log", font=ctk.CTkFont(size=18, weight="bold"))
@@ -663,71 +694,501 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.recon_results_box = ctk.CTkTextbox(card_r5, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=260)
         self.recon_results_box.pack(fill="both", expand=True, padx=15, pady=(0, 12))
 
-    def generate_dynamic_deck_ui(self):
-        lbl = ctk.CTkLabel(self.view_dynamic, text="Dynamic Testing Toolkit (Frida)", font=ctk.CTkFont(size=18, weight="bold"))
-        lbl.pack(anchor="w", padx=10, pady=(5, 5))
-        lbl_warn = ctk.CTkLabel(self.view_dynamic, text="Requires a rooted device/emulator. Only use against apps you are authorized to test.",
-                                 font=ctk.CTkFont(size=10), text_color="#FF8A65")
-        lbl_warn.pack(anchor="w", padx=10, pady=(0, 8))
+    # ---------------------------------------------------------------------
+    # SHARED CARD BUILDERS — used by BOTH generate_native_bypass_deck_ui() and
+    # generate_flutter_bypass_deck_ui() so each tab is fully self-contained (its own
+    # target picker + traffic routing) without copy-pasting the same 40 lines twice.
+    # ---------------------------------------------------------------------
+    def _build_target_selector_card(self, parent):
+        """Own 'Target Application' card with its own combo box. Returns the combo widget."""
+        card = ctk.CTkFrame(parent, fg_color="#16161A", corner_radius=6)
+        card.pack(fill="x", pady=4)
+        ctk.CTkLabel(card, text="① Select Target Application", font=ctk.CTkFont(size=12, weight="bold"), text_color="#FFB300").pack(anchor="w", padx=15, pady=(6, 4))
+        sub = ctk.CTkFrame(card, fg_color="transparent")
+        sub.pack(fill="x", padx=15, pady=(0, 10))
+        ctk.CTkButton(sub, text="Scan Installed Apps", width=150, fg_color="#0288D1", hover_color="#039BE5",
+                      command=self.start_dynamic_app_scan).pack(side="left", padx=(0, 5))
+        combo = ctk.CTkComboBox(sub, values=["Click Scan to look up application lists..."], width=280)
+        combo.pack(side="left", padx=5)
+        self.target_app_combo_widgets.append(combo)
+        return combo
 
-        card_d0 = ctk.CTkFrame(self.view_dynamic, fg_color="#16161A", corner_radius=6)
-        card_d0.pack(fill="x", pady=4)
-        lbl_d0 = ctk.CTkLabel(card_d0, text="Step 1: Device Environment & Frida Server", font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E5FF")
-        lbl_d0.pack(anchor="w", padx=15, pady=(6, 4))
-        sub_d0 = ctk.CTkFrame(card_d0, fg_color="transparent")
-        sub_d0.pack(fill="x", padx=15, pady=(0, 6))
-        btn_detect_env = ctk.CTkButton(sub_d0, text="Detect Device Environment", width=190, fg_color="#37474F", hover_color="#455A64", command=self.start_device_detection)
-        btn_detect_env.pack(side="left", padx=(0, 5))
-        self.lbl_device_env = ctk.CTkLabel(sub_d0, text="Device environment not detected yet.", text_color="#A0A0A5", anchor="w")
-        self.lbl_device_env.pack(side="left", padx=5)
-        sub_d0b = ctk.CTkFrame(card_d0, fg_color="transparent")
-        sub_d0b.pack(fill="x", padx=15, pady=(0, 10))
-        self.btn_deploy_frida = ctk.CTkButton(sub_d0b, text="Deploy Frida Server", width=190, fg_color="#5E35B1", hover_color="#6F35B1", command=self.start_frida_server_deploy)
-        self.btn_deploy_frida.pack(side="left", padx=(0, 5))
-        self.lbl_frida_server_status = ctk.CTkLabel(sub_d0b, text="Frida server not deployed yet.", text_color="#A0A0A5", anchor="w")
-        self.lbl_frida_server_status.pack(side="left", padx=5)
+    def _build_frida_server_card(self, parent, owns_deploy):
+        """
+        Device environment + frida-server status. Only ONE tab should 'own' the actual
+        Deploy button (Flutter, since the Flutter bypass mechanism IS Frida) — the other
+        tab just displays the same live status via the broadcast lists, owns_deploy=False,
+        so the two tabs can never fight over deploying the process twice.
+        """
+        card = ctk.CTkFrame(parent, fg_color="#16161A", corner_radius=6)
+        card.pack(fill="x", pady=4)
+        title = "② Device Environment & Frida Server" if owns_deploy else "Frida Server Status (reference — deploy from 🦋 Flutter Application Bypass tab)"
+        ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E5FF").pack(anchor="w", padx=15, pady=(6, 4))
 
-        card_d1 = ctk.CTkFrame(self.view_dynamic, fg_color="#16161A", corner_radius=6)
-        card_d1.pack(fill="x", pady=4)
-        lbl_d1 = ctk.CTkLabel(card_d1, text="Step 2: Target Application", font=ctk.CTkFont(size=12, weight="bold"), text_color="#FFB300")
-        lbl_d1.pack(anchor="w", padx=15, pady=(6, 4))
-        sub_d1 = ctk.CTkFrame(card_d1, fg_color="transparent")
-        sub_d1.pack(fill="x", padx=15, pady=(0, 10))
-        btn_scan_dyn_apps = ctk.CTkButton(sub_d1, text="Scan Installed Apps", width=150, fg_color="#0288D1", hover_color="#039BE5", command=self.start_dynamic_app_scan)
-        btn_scan_dyn_apps.pack(side="left", padx=(0, 5))
-        self.cbo_dynamic_apps = ctk.CTkComboBox(sub_d1, values=["Click Scan to look up application lists..."], width=280)
-        self.cbo_dynamic_apps.pack(side="left", padx=5)
+        sub_env = ctk.CTkFrame(card, fg_color="transparent")
+        sub_env.pack(fill="x", padx=15, pady=(0, 6))
+        if owns_deploy:
+            ctk.CTkButton(sub_env, text="Detect Device Environment", width=190, fg_color="#37474F", hover_color="#455A64",
+                          command=self.start_device_detection).pack(side="left", padx=(0, 5))
+        lbl_env = ctk.CTkLabel(sub_env, text="Device environment not detected yet.", text_color="#A0A0A5", anchor="w")
+        lbl_env.pack(side="left", padx=5)
+        self.lbl_device_env_widgets.append(lbl_env)
 
-        card_d2 = ctk.CTkFrame(self.view_dynamic, fg_color="#16161A", corner_radius=6)
-        card_d2.pack(fill="x", pady=4)
-        lbl_d2 = ctk.CTkLabel(card_d2, text="Step 3: Bypass Script Runner", font=ctk.CTkFont(size=12, weight="bold"), text_color="#E91E63")
-        lbl_d2.pack(anchor="w", padx=15, pady=(6, 4))
-        sub_d2 = ctk.CTkFrame(card_d2, fg_color="transparent")
-        sub_d2.pack(fill="x", padx=15, pady=(0, 10))
-        self.btn_run_ssl_bypass = ctk.CTkButton(sub_d2, text="Run SSL Pinning Bypass", width=170, fg_color="#C2185B", hover_color="#D81B60", command=lambda: self.start_bypass_script("ssl"))
-        self.btn_run_ssl_bypass.pack(side="left", padx=(0, 5))
-        self.btn_run_root_bypass = ctk.CTkButton(sub_d2, text="Run Root Detection Bypass", width=190, fg_color="#C2185B", hover_color="#D81B60", command=lambda: self.start_bypass_script("root"))
-        self.btn_run_root_bypass.pack(side="left", padx=5)
-        self.btn_run_both_bypass = ctk.CTkButton(sub_d2, text="Run Both", width=100, fg_color="#AD1457", hover_color="#C2185B", command=lambda: self.start_bypass_script("both"))
-        self.btn_run_both_bypass.pack(side="left", padx=5)
-        self.btn_detach_dynamic = ctk.CTkButton(sub_d2, text="Detach", width=100, fg_color="#37474F", hover_color="#455A64", command=self.stop_dynamic_session)
-        self.btn_detach_dynamic.pack(side="right")
+        sub_frida = ctk.CTkFrame(card, fg_color="transparent")
+        sub_frida.pack(fill="x", padx=15, pady=(0, 10))
+        if owns_deploy:
+            self.btn_deploy_frida = ctk.CTkButton(sub_frida, text="Deploy Frida Server", width=190, fg_color="#5E35B1", hover_color="#6F35B1",
+                                                    command=self.start_frida_server_deploy)
+            self.btn_deploy_frida.pack(side="left", padx=(0, 5))
+        lbl_frida = ctk.CTkLabel(sub_frida, text="Frida server not deployed yet.", text_color="#A0A0A5", anchor="w")
+        lbl_frida.pack(side="left", padx=5)
+        self.lbl_frida_server_status_widgets.append(lbl_frida)
 
-        sub_d2b = ctk.CTkFrame(card_d2, fg_color="transparent")
-        sub_d2b.pack(fill="x", padx=15, pady=(0, 10))
-        btn_load_custom_script = ctk.CTkButton(sub_d2b, text="Load Custom Script...", width=170, fg_color="#37474F", hover_color="#455A64", command=self.browse_custom_frida_script)
-        btn_load_custom_script.pack(side="left", padx=(0, 5))
-        self.lbl_custom_script = ctk.CTkLabel(sub_d2b, text="No custom script loaded.", text_color="#A0A0A5", anchor="w")
+    def _build_traffic_routing_card(self, parent, combo, step_num):
+        """
+        Traffic routing: the live iptables Enable/Verify/Revert buttons (broad, unscoped —
+        good for general recon) PLUS the UID-scoped 'Generate Capture-Traffic Script'
+        button (narrow, this-app-only — good for focused capture that won't disturb other
+        apps on the phone). Port field is bound to the shared burp_port_var StringVar so
+        both tabs' port fields always show the same value without any manual syncing.
+        """
+        card = ctk.CTkFrame(parent, fg_color="#16161A", corner_radius=6)
+        card.pack(fill="x", pady=4)
+        ctk.CTkLabel(card, text=f"{step_num} Route Traffic to Burp Suite", font=ctk.CTkFont(size=12, weight="bold"), text_color="#7C4DFF").pack(anchor="w", padx=15, pady=(6, 2))
+        ctk.CTkLabel(card,
+            text="'Enable Redirect' routes the WHOLE device's port 80/443 traffic to Burp (adb reverse + iptables NAT) — quick "
+                 "for general recon. 'Generate Capture-Traffic Script' instead writes a .bat that redirects ONLY the selected "
+                 "app's traffic (UID-scoped), so it won't break anything else on the phone — run that .bat directly in cmd.exe, "
+                 "any time, including after a reboot. In Burp: Proxy -> Settings -> listener on 127.0.0.1:<port> with "
+                 "'Support invisible proxying' enabled.\n"
+                 "⚠ IMPORTANT: a redirect rule only catches NEW connections — it does nothing for connections the app already had "
+                 "open before you enabled it. If nothing shows up in Burp after enabling, click 'Force-Restart Target App' below "
+                 "(or manually force-stop + reopen it) so it makes a fresh connection under the new rule.\n"
+                 "⚠ Switching the app dropdown above does NOT set up a redirect by itself — the redirect is tied to whichever app "
+                 "you clicked Generate/Enable FOR, not whatever's currently selected. Picking a different app? Click Generate/Enable "
+                 "again for it (safe to do — scoped rules stack, testing app #2 doesn't remove app #1's rule). Use 'Show Active "
+                 "Capture Rules' below any time to see exactly which app(s) are actually being redirected right now.\n"
+                 "⚠ 'Revert (ALL Apps On This Port)' clears EVERY rule on this port — including other apps you set up earlier in "
+                 "the same session. If you're testing multiple apps at once, use 'Revert (This App Only)' instead — it only removes "
+                 "the currently-selected app's own UID-scoped rule and leaves everyone else's capture running.",
+            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=780).pack(anchor="w", padx=15, pady=(0, 6))
+
+        sub_a = ctk.CTkFrame(card, fg_color="transparent")
+        sub_a.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkLabel(sub_a, text="Burp Port:").pack(side="left", padx=(0, 5))
+        ctk.CTkEntry(sub_a, width=80, textvariable=self.burp_port_var).pack(side="left", padx=(0, 15))
+        ctk.CTkButton(sub_a, text="Enable Redirect (All Apps)", width=180, fg_color="#5E35B1", hover_color="#6F35B1",
+                      command=self.start_burp_redirect_enable).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_a, text="Verify Rules", width=120, fg_color="#0288D1", hover_color="#039BE5",
+                      command=self.start_burp_redirect_verify).pack(side="left", padx=5)
+        ctk.CTkButton(sub_a, text="Revert (ALL Apps On This Port)", width=220, fg_color="#B71C1C", hover_color="#C62828",
+                      command=self.start_burp_redirect_revert).pack(side="left", padx=5)
+
+        sub_a2 = ctk.CTkFrame(card, fg_color="transparent")
+        sub_a2.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkButton(sub_a2, text="Generate Capture-Traffic Script (This App Only)", width=280, fg_color="#00838F", hover_color="#00ACC1",
+                      command=lambda: self.start_generate_capture_script(combo)).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_a2, text="Revert (This App Only)", width=180, fg_color="#37474F", hover_color="#455A64",
+                      command=lambda: self.start_burp_redirect_revert_scoped(combo)).pack(side="left", padx=5)
+        ctk.CTkButton(sub_a2, text="Force-Restart Target App", width=200, fg_color="#EF6C00", hover_color="#F57C00",
+                      command=lambda: self.start_force_restart_target(combo)).pack(side="left", padx=5)
+        ctk.CTkButton(sub_a2, text="Show Active Capture Rules", width=200, fg_color="#37474F", hover_color="#455A64",
+                      command=self.start_show_active_rules).pack(side="left", padx=5)
+
+        sub_b = ctk.CTkFrame(card, fg_color="transparent")
+        sub_b.pack(fill="x", padx=15, pady=(0, 6))
+        lbl_status = ctk.CTkLabel(sub_b, text="Status: not routed yet.", text_color="#A0A0A5", anchor="w")
+        lbl_status.pack(side="left")
+        self.lbl_burp_status_widgets.append(lbl_status)
+
+        box = ctk.CTkTextbox(card, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=120)
+        box.pack(fill="x", padx=15, pady=(0, 12))
+        self.burp_results_boxes.append(box)
+
+    # ---------------------------------------------------------------------
+    # SHARED — TARGET-APP SELECTION (each tab owns its OWN combo box so Native
+    # and Flutter can point at two different apps at once; scanning from either
+    # tab refreshes the installed-app list in BOTH, since it's the same phone).
+    # ---------------------------------------------------------------------
+    def _resolve_selected_target(self, combo, warn=True):
+        """
+        Reads whatever is currently picked in the given tab's own target combo box and
+        returns the resolved package name. Picking an item in a combo box only holds a
+        display string, not the real package — this is what turns that string into the
+        actual package name every worker needs. Also mirrors the result into
+        self.dynamic_target_package for any shared legacy code path that still reads it.
+        """
+        selected_display = combo.get()
+        if not selected_display or "Scan" in selected_display or selected_display not in self.discovered_dynamic_apps:
+            if warn:
+                messagebox.showwarning("No Target", "Click 'Scan Installed Apps' and select a target app first.")
+            return None
+        pkg = self.discovered_dynamic_apps[selected_display][0]
+        self.dynamic_target_package = pkg
+        return pkg
+
+    # ---------------------------------------------------------------------
+    # SHARED — STATUS BROADCAST HELPERS
+    #
+    # Device Frida-server state and the iptables/Burp traffic-routing state are each a
+    # SINGLE physical thing on the connected phone — there is only one frida-server
+    # process and one iptables table, no matter how many tabs show a status for them.
+    # Rather than duplicate the deploy/enable logic per tab (which would let the two
+    # tabs' displays drift out of sync, or double-deploy), each of these helpers updates
+    # every label/box that has registered itself in the matching *_widgets list, so any
+    # tab that just wants to DISPLAY the shared state (without owning the control that
+    # changes it) can add its label to the list and it stays live automatically.
+    # ---------------------------------------------------------------------
+    def _set_device_env_status(self, text, color):
+        for w in self.lbl_device_env_widgets:
+            if w.winfo_exists():
+                w.configure(text=text, text_color=color)
+
+    def _set_frida_status(self, text, color):
+        for w in self.lbl_frida_server_status_widgets:
+            if w.winfo_exists():
+                w.configure(text=text, text_color=color)
+
+    def _set_burp_status(self, text, color):
+        for w in self.lbl_burp_status_widgets:
+            if w.winfo_exists():
+                w.configure(text=text, text_color=color)
+
+    def _dyn_log(self, msg):
+        """Broadcasts Frida attach/status output (bypass_script_worker, _on_frida_message)
+        to every tab's own console box — Native's Frida-based bypass and Flutter's
+        auto-offset bypass both attach through the same shared frida session machinery."""
+        for box in self.frida_attach_results_boxes:
+            if box.winfo_exists():
+                box.insert("end", msg + "\n")
+                box.see("end")
+
+    # ---------------------------------------------------------------------
+    # SHARED — GENERATE CAPTURE-TRAFFIC .BAT SCRIPT (UID-scoped, native + Flutter alike)
+    #
+    # Traffic capture setup (adb reverse + IPv6 disable + iptables DNAT) does not care
+    # whether the target app is native or Flutter — only the SSL BYPASS mechanism
+    # differs between them. Scoping the iptables rule with -m owner --uid-owner <uid>
+    # (looked up via an EXACT match on `pm list packages -U`, never a substring match —
+    # a sibling package name like "com.example.app.cug" will otherwise silently steal
+    # the wrong UID) keeps this from redirecting the whole device's traffic, unlike the
+    # broader Step 2 Burp routing buttons above, which stay unscoped on purpose for
+    # general recon.
+    # ---------------------------------------------------------------------
+    def _get_package_uid(self, package, log_fn):
+        proc = subprocess.run(["adb", "shell", "pm", "list", "packages", "-U", package],
+                               capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        output = (proc.stdout + proc.stderr)
+        for line in output.splitlines():
+            line = line.strip()
+            m = re.match(rf"^package:{re.escape(package)}\s+uid:(\d+)\s*$", line)
+            if m:
+                return m.group(1)
+        log_fn(f"[FAIL] No exact-match UID found for '{package}'. Raw output:\n{output.strip() or '(empty)'}")
+        log_fn("[HINT] If this package has a sibling with a similar name (e.g. a '.cug'/'.debug' variant), "
+               "make sure the app is actually installed and the package name is spelled exactly right.")
+        return None
+
+    def _write_capture_traffic_bat(self, package, uid, port, out_path):
+        lines = [
+            "@echo off",
+            f"REM Auto-generated by MobiSuite-Mobile - capture traffic for {package} (UID {uid}) via Burp on port {port}",
+            "REM Re-run this after every device reboot - none of this survives a restart.",
+            "echo [*] Forwarding local Burp port back through adb...",
+            f"adb reverse tcp:{port} tcp:{port}",
+            "echo [*] Disabling IPv6 (redirect below is IPv4-only, IPv6 traffic would otherwise sail past it)...",
+            "adb shell su -c \"echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6\"",
+            "adb shell su -c \"echo 1 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6\"",
+            f"echo [*] Redirecting {package}'s HTTPS/HTTP traffic (UID {uid} only) to 127.0.0.1:{port}...",
+            f"adb shell su -c \"iptables -t nat -A OUTPUT -m owner --uid-owner {uid} -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:{port}\"",
+            f"adb shell su -c \"iptables -t nat -A OUTPUT -m owner --uid-owner {uid} -p tcp --dport 80 -j DNAT --to-destination 127.0.0.1:{port}\"",
+            "echo [*] Verifying the rules actually took effect...",
+            "adb shell su -c \"iptables -t nat -L OUTPUT -n --line-numbers\"",
+            "echo [*] Force-restarting the app so it opens a FRESH connection under the new rule",
+            "echo     (a redirect rule only catches NEW connections, not ones already open before it was added)...",
+            f"adb shell am force-stop {package}",
+            f"adb shell monkey -p {package} -c android.intent.category.LAUNCHER 1",
+            "echo.",
+            "echo Done. In Burp: Proxy -> Settings -> listener on 127.0.0.1:%s with 'Support invisible proxying' enabled." % port,
+            "pause",
+        ]
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write("\r\n".join(lines) + "\r\n")
+
+    def start_generate_capture_script(self, combo):
+        package = self._resolve_selected_target(combo, warn=True)
+        if not package:
+            return
+        port = self._burp_get_port()
+        if not port:
+            return
+        self.update_task_state(f"[Capture Traffic] Generating .bat for {package}...", "running")
+        threading.Thread(target=self._generate_capture_script_worker, args=(package, port), daemon=True).start()
+
+    def _generate_capture_script_worker(self, package, port):
+        def log(msg):
+            self._burp_log(msg)
+            self.log(msg)
+
+        log(f"[*] Looking up UID for {package}...")
+        uid = self._get_package_uid(package, log)
+        if not uid:
+            self.update_task_state("Capture-traffic script generation failed - UID lookup failed.", "failed")
+            return
+        log(f"[OK] UID: {uid}")
+
+        safe_pkg = re.sub(r"[^A-Za-z0-9._-]", "_", package)
+        out_path = os.path.join(CAPTURE_TRAFFIC_OUTPUT_DIR, f"capture_traffic_{safe_pkg}_{port}.bat")
+        try:
+            self._write_capture_traffic_bat(package, uid, port, out_path)
+        except Exception as e:
+            log(f"[FAIL] Could not write script: {str(e)}")
+            self.update_task_state("Capture-traffic script generation failed.", "failed")
+            return
+
+        abs_path = os.path.abspath(out_path)
+        log(f"[OK] Script written: {abs_path}")
+        log("[*] Run it directly in cmd.exe (double-click, or `cmd /c` it) — no Python/GUI needed. Redo after every device reboot.")
+        self.update_task_state(f"Capture-traffic script ready: {os.path.basename(out_path)}", "success")
+        messagebox.showinfo("Capture-Traffic Script Generated",
+                             f"Written to:\n{abs_path}\n\nRun it in cmd.exe. Re-run after every device reboot "
+                             f"(the redirect doesn't persist).")
+
+    # ---------------------------------------------------------------------
+    # SHARED — FORCE-RESTART TARGET APP
+    #
+    # An iptables DNAT rule (whichever kind — broad or UID-scoped) only intercepts NEW
+    # outgoing connections; it does nothing for TCP connections the app already had open
+    # before the rule was added. If the target app was already running when you enabled
+    # the redirect, its existing keep-alive connections keep flowing straight past Burp
+    # and it LOOKS like nothing is being captured. Force-stopping and relaunching forces
+    # a brand new connection under the new rule — confirmed this is exactly what was
+    # needed the first time capture appeared to not be working during testing.
+    # ---------------------------------------------------------------------
+    def start_force_restart_target(self, combo):
+        package = self._resolve_selected_target(combo, warn=True)
+        if not package:
+            return
+        self.update_task_state(f"[Restart] Force-stopping and relaunching {package}...", "running")
+        threading.Thread(target=self._force_restart_target_worker, args=(package,), daemon=True).start()
+
+    def _force_restart_target_worker(self, package):
+        self._burp_log(f"[*] adb shell am force-stop {package}")
+        subprocess.run(["adb", "shell", "am", "force-stop", package], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        time.sleep(1.5)
+        self._burp_log(f"[*] Relaunching {package} (fresh process — any traffic it now makes uses a brand new connection, "
+                        f"so it actually hits the current iptables rule)...")
+        proc = subprocess.run(["adb", "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+                               capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        out = (proc.stdout + proc.stderr).strip()
+        self._burp_log(out if out else "(no output)")
+        if "Events injected: 1" in out:
+            self._burp_log(f"[OK] {package} relaunched. Navigate the app to trigger a request, then check Burp -> Proxy -> HTTP history.")
+            self.update_task_state(f"{package} force-restarted.", "success")
+        else:
+            self._burp_log("[WARN] Relaunch may not have worked — check the output above (app may not have a LAUNCHER activity, "
+                            "or the package name may be wrong).")
+            self.update_task_state(f"{package} restart: unclear result.", "failed")
+
+    # ---------------------------------------------------------------------
+    # SHARED — SHOW ACTIVE CAPTURE RULES
+    #
+    # UID-scoped rules are additive (each 'Generate Capture-Traffic Script' click just
+    # appends a new -A rule) — switching the target-app dropdown does NOT itself set up a
+    # redirect for the newly selected app, and it does NOT remove the rule for whichever
+    # app you set up before. So it's easy to think "I switched apps, why isn't THIS one
+    # capturing" when really the old app's rule is still the only one active. This reads
+    # the live table and resolves each UID back to a package name so it's obvious which
+    # app(s) are actually being redirected right now.
+    # ---------------------------------------------------------------------
+    def _resolve_pkg_name_from_uid(self, uid):
+        proc = subprocess.run(["adb", "shell", "pm", "list", "packages", "-U"], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        for line in proc.stdout.splitlines():
+            m = re.match(rf"^package:(\S+)\s+uid:{uid}\s*$", line.strip())
+            if m:
+                return m.group(1)
+        return None
+
+    def start_show_active_rules(self):
+        self._burp_clear_log()
+        self.update_task_state("[Capture Traffic] Listing active per-app redirect rules...", "running")
+        threading.Thread(target=self._show_active_rules_worker, daemon=True).start()
+
+    def _show_active_rules_worker(self):
+        _, output = self._run_adb_su("iptables -t nat -L OUTPUT -n --line-numbers")
+        self._burp_log("---- iptables -t nat -L OUTPUT -n --line-numbers ----")
+        self._burp_log(output if output else "(empty)")
+
+        uid_re = re.compile(r"owner UID match (\d+).*?dpt:(\d+)")
+        scoped = {}
+        unscoped_ports = set()
+        for line in output.splitlines():
+            if "DNAT" not in line or "to:127.0.0.1" not in line:
+                continue
+            m = uid_re.search(line)
+            if m:
+                uid, dport = m.group(1), m.group(2)
+                scoped.setdefault(uid, set()).add(dport)
+            else:
+                dm = re.search(r"dpt:(\d+)", line)
+                if dm:
+                    unscoped_ports.add(dm.group(1))
+
+        if not scoped and not unscoped_ports:
+            self._burp_log("\n[*] No active redirect rules at all right now — nothing is being captured for ANY app.")
+            self.update_task_state("No active capture rules.", "idle")
+            return
+
+        self._burp_log("\n---- Active per-app capture rules ----")
+        if unscoped_ports:
+            self._burp_log(f"  ALL APPS (broad, unscoped redirect) — ports {sorted(unscoped_ports, key=int)}")
+        for uid, ports in scoped.items():
+            pkg_name = self._resolve_pkg_name_from_uid(uid) or "unknown package"
+            self._burp_log(f"  {pkg_name} (UID {uid}) — ports {sorted(ports, key=int)}")
+        self._burp_log("\nIf the app you want isn't listed above, its traffic is NOT being redirected — select it in the target "
+                        "picker and click 'Generate Capture-Traffic Script' or 'Enable Redirect' for it (this is additive, it "
+                        "won't remove any rule already listed here).")
+        self.update_task_state("Active capture rules listed.", "success")
+
+    # ---------------------------------------------------------------------
+    # NATIVE SSL BYPASS DECK
+    # ---------------------------------------------------------------------
+    def generate_native_bypass_deck_ui(self):
+        lbl = ctk.CTkLabel(self.view_native_bypass, text="🔒 Native Application Bypass", font=ctk.CTkFont(size=18, weight="bold"))
+        lbl.pack(anchor="w", padx=10, pady=(5, 2))
+        ctk.CTkLabel(self.view_native_bypass,
+            text="WHAT THIS TAB IS FOR: bypassing SSL pinning / root-RASP checks on NATIVE (Java/Kotlin, non-Flutter) apps. "
+                 "Two independent approaches are provided below — use whichever matches your workflow, or both:\n"
+                 "  • Frida-Based Bypass: live, in-process attach — fast for one-off testing, but nothing persists after the app restarts or the phone reboots.\n"
+                 "  • LSPosed Module Bypass: installs a persistent Xposed/LSPosed module you built separately — survives relaunches, matches a real "
+                 "engagement workflow (build a dedicated module in Android Studio, then install + scope it here).\n"
+                 "HOW TO USE: ① pick the target app, ② route its traffic to Burp, ③ run ONE of the two bypass sections below.",
+            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=820).pack(anchor="w", padx=10, pady=(0, 10))
+
+        combo = self._build_target_selector_card(self.view_native_bypass)
+        self.cbo_native_apps = combo
+        self._build_frida_server_card(self.view_native_bypass, owns_deploy=False)
+        self._build_traffic_routing_card(self.view_native_bypass, combo, step_num="②")
+
+        # --- Approach A: Frida-based bypass (live attach) ---
+        card_frida = ctk.CTkFrame(self.view_native_bypass, fg_color="#16161A", corner_radius=6)
+        card_frida.pack(fill="x", pady=4)
+        ctk.CTkLabel(card_frida, text="③A Frida-Based Bypass (live attach — requires Frida server deployed above)",
+                     font=ctk.CTkFont(size=12, weight="bold"), text_color="#E91E63").pack(anchor="w", padx=15, pady=(6, 4))
+        sub_fr = ctk.CTkFrame(card_frida, fg_color="transparent")
+        sub_fr.pack(fill="x", padx=15, pady=(0, 10))
+        ctk.CTkButton(sub_fr, text="Run SSL Pinning Bypass", width=170, fg_color="#C2185B", hover_color="#D81B60",
+                      command=lambda: self.start_bypass_script("ssl", combo)).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_fr, text="Run Root Detection Bypass", width=190, fg_color="#C2185B", hover_color="#D81B60",
+                      command=lambda: self.start_bypass_script("root", combo)).pack(side="left", padx=5)
+        ctk.CTkButton(sub_fr, text="Run Both", width=100, fg_color="#AD1457", hover_color="#C2185B",
+                      command=lambda: self.start_bypass_script("both", combo)).pack(side="left", padx=5)
+        ctk.CTkButton(sub_fr, text="Detach", width=100, fg_color="#37474F", hover_color="#455A64",
+                      command=self.stop_dynamic_session).pack(side="right")
+
+        sub_fr_b = ctk.CTkFrame(card_frida, fg_color="transparent")
+        sub_fr_b.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkButton(sub_fr_b, text="Load Custom Script...", width=170, fg_color="#37474F", hover_color="#455A64",
+                      command=self.browse_custom_frida_script).pack(side="left", padx=(0, 5))
+        self.lbl_custom_script = ctk.CTkLabel(sub_fr_b, text="No custom script loaded.", text_color="#A0A0A5", anchor="w")
         self.lbl_custom_script.pack(side="left", padx=5)
-        self.btn_run_custom_bypass = ctk.CTkButton(sub_d2b, text="Run Custom Script", width=150, fg_color="#AD1457", hover_color="#C2185B", state="disabled", command=lambda: self.start_bypass_script("custom"))
+        self.btn_run_custom_bypass = ctk.CTkButton(sub_fr_b, text="Run Custom Script", width=150, fg_color="#AD1457", hover_color="#C2185B",
+                                                     state="disabled", command=lambda: self.start_bypass_script("custom", combo))
         self.btn_run_custom_bypass.pack(side="right")
 
-        card_d4 = ctk.CTkFrame(self.view_dynamic, fg_color="#16161A", corner_radius=6)
-        card_d4.pack(fill="both", expand=True, pady=4)
-        lbl_d4 = ctk.CTkLabel(card_d4, text="Dynamic Testing Results & Console", font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E5FF")
-        lbl_d4.pack(anchor="w", padx=15, pady=(6, 4))
-        self.dynamic_results_box = ctk.CTkTextbox(card_d4, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=260)
-        self.dynamic_results_box.pack(fill="both", expand=True, padx=15, pady=(0, 12))
+        native_frida_results_box = ctk.CTkTextbox(card_frida, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=120)
+        native_frida_results_box.pack(fill="x", padx=15, pady=(0, 12))
+        self.frida_attach_results_boxes.append(native_frida_results_box)
+
+        # --- Approach B: LSPosed module bypass (cmd-driven, persistent) ---
+        card_lspd = ctk.CTkFrame(self.view_native_bypass, fg_color="#16161A", corner_radius=6)
+        card_lspd.pack(fill="both", expand=True, pady=4)
+        ctk.CTkLabel(card_lspd, text="③B LSPosed Module Bypass (cmd-driven — install + scope a pre-built module)",
+                     font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E676").pack(anchor="w", padx=15, pady=(6, 2))
+        ctk.CTkLabel(card_lspd,
+            text="Requires LSPosed already active on the device (Zygisk/KernelSU-Next, etc.) and a module APK you built separately "
+                 "(e.g. in Android Studio). This installs it, enables it, and scopes it to the target app via adb + sqlite3 against "
+                 "LSPosed's own modules_config.db — the same commands used manually during a real engagement. "
+                 "⚠ Reboot the device after scoping — LSPosed only applies scope changes on next boot.",
+            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=820).pack(anchor="w", padx=15, pady=(0, 6))
+
+        sub_l1 = ctk.CTkFrame(card_lspd, fg_color="transparent")
+        sub_l1.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkButton(sub_l1, text="Select Module APK", width=150, fg_color="#37474F", hover_color="#455A64",
+                      command=self.browse_lspd_module_apk).pack(side="left", padx=(0, 5))
+        self.lbl_lspd_apk = ctk.CTkLabel(sub_l1, text="No module APK selected.", text_color="#A0A0A5", anchor="w")
+        self.lbl_lspd_apk.pack(side="left", padx=5)
+        ctk.CTkButton(sub_l1, text="Install Module APK", width=160, fg_color="#2E7D32", hover_color="#388E3C",
+                      command=self.start_lspd_install).pack(side="right")
+
+        sub_l2 = ctk.CTkFrame(card_lspd, fg_color="transparent")
+        sub_l2.pack(fill="x", padx=15, pady=(0, 10))
+        ctk.CTkLabel(sub_l2, text="Module Package:").pack(side="left", padx=(0, 5))
+        self.ent_lspd_module_pkg = ctk.CTkEntry(sub_l2, width=260, placeholder_text="e.g. com.example.app.cug")
+        self.ent_lspd_module_pkg.pack(side="left", padx=(0, 15))
+        ctk.CTkButton(sub_l2, text="Enable + Scope to Target App", width=200, fg_color="#5E35B1", hover_color="#6F35B1",
+                      command=lambda: self.start_lspd_scope(combo)).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_l2, text="Verify Scope", width=130, fg_color="#0288D1", hover_color="#039BE5",
+                      command=lambda: self.start_lspd_verify(combo)).pack(side="left", padx=5)
+
+        self.lspd_results_box = ctk.CTkTextbox(card_lspd, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=140)
+        self.lspd_results_box.pack(fill="both", expand=True, padx=15, pady=(0, 12))
+
+    # ---------------------------------------------------------------------
+    # FLUTTER APPLICATION BYPASS DECK
+    # ---------------------------------------------------------------------
+    def generate_flutter_bypass_deck_ui(self):
+        lbl = ctk.CTkLabel(self.view_flutter_bypass, text="🦋 Flutter Application Bypass", font=ctk.CTkFont(size=18, weight="bold"))
+        lbl.pack(anchor="w", padx=10, pady=(5, 2))
+        ctk.CTkLabel(self.view_flutter_bypass,
+            text="WHAT THIS TAB IS FOR: bypassing SSL pinning on FLUTTER apps. libflutter.so bundles its own TLS stack, so the "
+                 "generic Android SSL-pinning bypass does nothing here — this tab auto-detects the certificate-verify offset inside "
+                 "libflutter.so and hooks it directly via Frida.\n"
+                 "HOW TO USE: ① pick the target app, ② deploy Frida server (this tab owns that control — Native tab just mirrors its "
+                 "status), ③ route traffic to Burp, ④ run the auto bypass.",
+            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=820).pack(anchor="w", padx=10, pady=(0, 10))
+
+        combo = self._build_target_selector_card(self.view_flutter_bypass)
+        self.cbo_flutter_apps = combo
+        self._build_frida_server_card(self.view_flutter_bypass, owns_deploy=True)
+        self._build_traffic_routing_card(self.view_flutter_bypass, combo, step_num="③")
+
+        card_d3 = ctk.CTkFrame(self.view_flutter_bypass, fg_color="#16161A", corner_radius=6)
+        card_d3.pack(fill="both", expand=True, pady=4)
+        lbl_d3 = ctk.CTkLabel(card_d3, text="④ Flutter SSL Pinning Bypass (Auto Offset Detection)", font=ctk.CTkFont(size=12, weight="bold"), text_color="#00ACC1")
+        lbl_d3.pack(anchor="w", padx=15, pady=(6, 2))
+        lbl_d3_warn = ctk.CTkLabel(card_d3, text="⚠ Flutter apps ONLY — does nothing on native/Java-only APKs (use the 🔒 Native Application Bypass tab for those).",
+                                     font=ctk.CTkFont(size=10), text_color="#FF8A65", anchor="w", justify="left")
+        lbl_d3_warn.pack(anchor="w", padx=15, pady=(0, 6))
+
+        sub_d3a = ctk.CTkFrame(card_d3, fg_color="transparent")
+        sub_d3a.pack(fill="x", padx=15, pady=(0, 6))
+        self.btn_run_flutter_bypass = ctk.CTkButton(sub_d3a, text="Run Auto Flutter SSL Bypass", width=200, fg_color="#00838F", hover_color="#00ACC1",
+                                                      command=lambda: self.start_flutter_auto_bypass(combo))
+        self.btn_run_flutter_bypass.pack(side="left", padx=(0, 5))
+        self.lbl_flutter_apk = ctk.CTkLabel(sub_d3a, text="No APK selected yet (will prompt, or reuse the Android tab's APK).", text_color="#A0A0A5", anchor="w")
+        self.lbl_flutter_apk.pack(side="left", padx=5)
+
+        sub_d3b = ctk.CTkFrame(card_d3, fg_color="transparent")
+        sub_d3b.pack(fill="x", padx=15, pady=(0, 4))
+        self.lbl_flutter_pipeline = ctk.CTkLabel(sub_d3b, text="Status: idle — not run yet.", text_color="#A0A0A5", anchor="w")
+        self.lbl_flutter_pipeline.pack(side="left", padx=(0, 5))
+
+        sub_d3c = ctk.CTkFrame(card_d3, fg_color="transparent")
+        sub_d3c.pack(fill="x", padx=15, pady=(0, 10))
+        self.lbl_flutter_confidence = ctk.CTkLabel(sub_d3c, text="Confidence: —", text_color="#A0A0A5", anchor="w", width=260)
+        self.lbl_flutter_confidence.pack(side="left", padx=(0, 15))
+        self.lbl_flutter_offset = ctk.CTkLabel(sub_d3c, text="Offset: —", text_color="#A0A0A5", anchor="w", width=160)
+        self.lbl_flutter_offset.pack(side="left", padx=(0, 15))
+        self.lbl_flutter_hits = ctk.CTkLabel(sub_d3c, text="Hook Hits: not attached yet", text_color="#A0A0A5", anchor="w")
+        self.lbl_flutter_hits.pack(side="left")
+
+        lbl_d3_res = ctk.CTkLabel(card_d3, text="Flutter Bypass Diagnostics (extract / scan / attach / runtime hook confirmation)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#00E5FF")
+        lbl_d3_res.pack(anchor="w", padx=15, pady=(0, 4))
+        self.flutter_results_box = ctk.CTkTextbox(card_d3, fg_color="#09090B", text_color="#00E676", font=ctk.CTkFont(family="Consolas", size=12), height=140)
+        self.flutter_results_box.pack(fill="both", expand=True, padx=15, pady=(0, 12))
+        self.frida_attach_results_boxes.append(self.flutter_results_box)
 
     def refresh_interface_locks(self):
         self.btn_decompile.configure(state="normal" if self.target_apk else "disabled")
@@ -1518,7 +1979,7 @@ class NKCyberSuiteMobile(ctk.CTk):
             android_version = ver_proc.stdout.strip()
             if not abi:
                 self.log("[-] Could not detect device ABI. Is a device/emulator connected?")
-                self.lbl_device_env.configure(text="No device detected.", text_color="#FF1744")
+                self._set_device_env_status("No device detected.", "#FF1744")
                 self.update_task_state("Device detection failed.", "failed")
                 return
 
@@ -1541,7 +2002,7 @@ class NKCyberSuiteMobile(ctk.CTk):
             serial = serial_proc.stdout.strip()
 
             self.log(f"\n[*] Device environment: serial={serial} ABI={abi} Android={android_version} su={su_output!r}")
-            self.lbl_device_env.configure(text=f"ABI={abi} | Android {android_version} | {root_status}", text_color=text_color)
+            self._set_device_env_status(f"ABI={abi} | Android {android_version} | {root_status}", text_color)
             self.update_task_state("Device environment detected.", "success" if self.device_root_ready else "failed")
         except Exception as e:
             self.log(f"[-] Device detection exception: {str(e)}")
@@ -1598,7 +2059,7 @@ class NKCyberSuiteMobile(ctk.CTk):
             su_output = (su_check.stdout + su_check.stderr).strip()
             if "uid=0" not in su_output:
                 self.log(f"[-] su access denied ({su_output!r}). Open Magisk on the device and grant ADB shell superuser access, then retry.")
-                self.lbl_frida_server_status.configure(text="su denied - grant Magisk ADB access first.", text_color="#FF1744")
+                self._set_frida_status("su denied - grant Magisk ADB access first.", "#FF1744")
                 self.update_task_state("Frida deploy failed - su denied.", "failed")
                 self.btn_deploy_frida.configure(state="normal")
                 return
@@ -1613,14 +2074,14 @@ class NKCyberSuiteMobile(ctk.CTk):
             if self.frida_server_process.poll() is not None:
                 output = self.frida_server_process.stdout.read()
                 self.log(f"[-] frida-server exited immediately: {output.strip()}")
-                self.lbl_frida_server_status.configure(text="frida-server failed to start.", text_color="#FF1744")
+                self._set_frida_status("frida-server failed to start.", "#FF1744")
                 self.update_task_state("Frida deploy failed.", "failed")
                 self.btn_deploy_frida.configure(state="normal")
                 return
 
             subprocess.run(["adb", "forward", "tcp:27042", "tcp:27042"], creationflags=SUBPROCESS_FLAGS)
             self.log(f"\n[+] frida-server {version} ({arch}) deployed and running on device.")
-            self.lbl_frida_server_status.configure(text=f"frida-server {version} running.", text_color="#00E676")
+            self._set_frida_status(f"frida-server {version} running.", "#00E676")
             self.update_task_state("Frida server deployed.", "success")
         except Exception as e:
             self.log(f"[-] Frida server deploy exception: {str(e)}")
@@ -1628,10 +2089,264 @@ class NKCyberSuiteMobile(ctk.CTk):
         self.btn_deploy_frida.configure(state="normal")
 
     # ---------------------------------------------------------------------
-    # DYNAMIC TESTING DECK — TARGET APP SCAN + BYPASS SCRIPT RUNNER
+    # DYNAMIC TESTING DECK — ROUTE TRAFFIC TO BURP (ADB REVERSE + IPTABLES NAT)
+    # ---------------------------------------------------------------------
+    def _burp_log(self, msg):
+        for box in self.burp_results_boxes:
+            if box.winfo_exists():
+                box.insert("end", msg + "\n")
+                box.see("end")
+
+    def _burp_clear_log(self):
+        for box in self.burp_results_boxes:
+            if box.winfo_exists():
+                box.delete("1.0", "end")
+
+    def _run_adb_su(self, cmd_str):
+        """Runs a command as root on the device via `adb shell su -c`. Returns (returncode, combined_output)."""
+        proc = subprocess.run(["adb", "shell", "su", "-c", cmd_str], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        return proc.returncode, (proc.stdout + proc.stderr).strip()
+
+    def _burp_get_port(self):
+        port = (self.burp_port_var.get() or "").strip() or "8080"
+        if not port.isdigit():
+            messagebox.showwarning("Invalid Port", "Burp port must be numeric.")
+            return None
+        return port
+
+    def _burp_check_rules(self, port):
+        """
+        Re-reads the live iptables NAT table from the device and checks whether our
+        DNAT rules are actually present — this is the real proof, not an assumption
+        from a zero exit code. Returns (has_443, has_80, raw_output).
+        """
+        rc, output = self._run_adb_su("iptables -t nat -L OUTPUT -n --line-numbers")
+        target_re = re.escape(f"to:127.0.0.1:{port}")
+        has_443 = False
+        has_80 = False
+        for line in output.splitlines():
+            if "DNAT" not in line or not re.search(target_re, line):
+                continue
+            if re.search(r"dpt:443\b", line):
+                has_443 = True
+            if re.search(r"dpt:80\b", line):
+                has_80 = True
+        return has_443, has_80, output
+
+    def _burp_find_matching_line_numbers(self, port):
+        """
+        Returns [(line_num, full_line_text), ...] for OUTPUT-chain DNAT rules targeting
+        127.0.0.1:<port> — regardless of whether they're the broad unscoped rule (from
+        'Enable Redirect') or a UID-scoped one (from the capture-traffic script / manual
+        setup). Deleting by line number (rather than reconstructing the exact rule spec
+        for `-D`) works no matter which mechanism added the rule, since `-D <num>` matches
+        by position, not by a full field-for-field match that scoped rules would fail.
+        """
+        rc, output = self._run_adb_su("iptables -t nat -L OUTPUT -n --line-numbers")
+        target_re = re.escape(f"to:127.0.0.1:{port}")
+        matches = []
+        for line in output.splitlines():
+            if "DNAT" not in line or not re.search(target_re, line):
+                continue
+            m = re.match(r"^\s*(\d+)\s", line)
+            if m:
+                matches.append((int(m.group(1)), line.strip()))
+        return matches
+
+    def start_burp_redirect_enable(self):
+        port = self._burp_get_port()
+        if not port:
+            return
+        self._burp_clear_log()
+        self._set_burp_status("Status: enabling redirect...", "#FFB300")
+        self.update_task_state(f"[Burp] Routing device traffic to 127.0.0.1:{port} via adb reverse + iptables...", "running")
+        threading.Thread(target=self.burp_redirect_enable_worker, args=(port,), daemon=True).start()
+
+    def burp_redirect_enable_worker(self, port):
+        try:
+            self._burp_log(f"[*] adb reverse tcp:{port} tcp:{port}  (tunnels the device's loopback port back to Burp on this machine)")
+            rev = subprocess.run(["adb", "reverse", f"tcp:{port}", f"tcp:{port}"], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+            rev_out = (rev.stdout + rev.stderr).strip()
+            self._burp_log(rev_out if rev_out else "(no output)")
+            if rev.returncode != 0:
+                self._burp_log("[FAIL] adb reverse failed — is a device/emulator connected via 'adb devices'?")
+                self._set_burp_status("Status: FAILED — adb reverse error", "#FF5252")
+                self.update_task_state("Burp redirect failed - adb reverse error.", "failed")
+                return
+
+            self._burp_log(f"[*] iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:{port}")
+            rc443, out443 = self._run_adb_su(f"iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:{port}")
+            self._burp_log(out443 if out443 else f"(no output, exit code {rc443})")
+
+            self._burp_log(f"[*] iptables -t nat -A OUTPUT -p tcp --dport 80  -j DNAT --to-destination 127.0.0.1:{port}")
+            rc80, out80 = self._run_adb_su(f"iptables -t nat -A OUTPUT -p tcp --dport 80 -j DNAT --to-destination 127.0.0.1:{port}")
+            self._burp_log(out80 if out80 else f"(no output, exit code {rc80})")
+
+            combined = (out443 + out80).lower()
+            if "permission denied" in combined or "not permitted" in combined:
+                self._burp_log("[FAIL] su denied. Grant ADB shell root access (e.g. in Magisk) and retry.")
+                self._set_burp_status("Status: FAILED — root access denied", "#FF5252")
+                self.update_task_state("Burp redirect failed - root denied.", "failed")
+                return
+            if "not found" in combined or "inaccessible" in combined:
+                self._burp_log("[FAIL] iptables not available on this device/emulator.")
+                self._set_burp_status("Status: FAILED — iptables unavailable", "#FF5252")
+                self.update_task_state("Burp redirect failed - iptables unavailable.", "failed")
+                return
+            if rc443 != 0 or rc80 != 0:
+                self._burp_log(f"[FAIL] iptables returned a non-zero exit code (443: {rc443}, 80: {rc80}) even though no "
+                                f"recognizable error text was in the output — the rule was likely NOT added. See raw output above.")
+                self._set_burp_status(f"Status: FAILED — iptables exit code 443:{rc443} 80:{rc80}", "#FF5252")
+                self.update_task_state("Burp redirect failed - iptables non-zero exit.", "failed")
+                return
+
+            self._burp_log("[*] Re-reading the live iptables NAT table to confirm the rules actually took effect...")
+            self._burp_finish_verify(port, action_label="Redirect enabled")
+        except Exception as e:
+            self._burp_log(f"[FAIL] Exception: {str(e)}")
+            self._set_burp_status("Status: FAILED — exception", "#FF5252")
+            self.update_task_state("Burp redirect failed.", "failed")
+
+    def start_burp_redirect_verify(self):
+        port = self._burp_get_port()
+        if not port:
+            return
+        self._burp_clear_log()
+        self.update_task_state(f"[Burp] Verifying iptables NAT rules for port {port}...", "running")
+        threading.Thread(target=self.burp_redirect_verify_worker, args=(port,), daemon=True).start()
+
+    def burp_redirect_verify_worker(self, port):
+        try:
+            self._burp_finish_verify(port, action_label="Verification")
+        except Exception as e:
+            self._burp_log(f"[FAIL] Exception: {str(e)}")
+            self.update_task_state("Burp redirect verification failed.", "failed")
+
+    def _burp_finish_verify(self, port, action_label):
+        """Shared close-the-loop check: re-reads iptables state and reports what's ACTUALLY there."""
+        has_443, has_80, raw = self._burp_check_rules(port)
+        self._burp_log("---- iptables -t nat -L OUTPUT -n --line-numbers ----")
+        self._burp_log(raw if raw else "(empty output — su may have failed silently)")
+        self._burp_log("-----------------------------------------------------")
+
+        if has_443 and has_80:
+            self._burp_log(f"[OK] Confirmed: both port 443 and 80 are DNAT'd to 127.0.0.1:{port}.")
+            self._set_burp_status(f"Status: ROUTED — CONFIRMED (443 & 80 -> 127.0.0.1:{port})", "#00E676")
+            self.update_task_state(f"{action_label}: traffic redirect confirmed on-device.", "success")
+        elif has_443 or has_80:
+            missing = "80" if has_443 else "443"
+            self._burp_log(f"[WARN] Only one of the two rules is present — port {missing} is NOT redirected.")
+            self._set_burp_status(f"Status: PARTIAL — port {missing} not redirected", "#FFB300")
+            self.update_task_state(f"{action_label}: partial redirect only.", "failed")
+        else:
+            self._burp_log("[FAIL] No matching DNAT rule found for this port. Traffic is NOT being routed to Burp.")
+            self._set_burp_status("Status: NOT ROUTED — no matching rules found", "#FF5252")
+            self.update_task_state(f"{action_label}: no redirect rules found.", "failed")
+
+        self._burp_log("\nReminder: in Burp, Proxy -> Settings -> add a listener on 127.0.0.1:" + port + " with 'Support invisible proxying' enabled, then generate traffic in the app and check Proxy -> HTTP history.")
+
+    def start_burp_redirect_revert(self):
+        port = self._burp_get_port()
+        if not port:
+            return
+        self._burp_clear_log()
+        self.update_task_state(f"[Burp] Reverting traffic redirect for port {port}...", "running")
+        threading.Thread(target=self.burp_redirect_revert_worker, args=(port,), daemon=True).start()
+
+    def burp_redirect_revert_worker(self, port):
+        try:
+            self._burp_log(f"[*] Scanning iptables nat OUTPUT chain for any DNAT rule targeting 127.0.0.1:{port} "
+                            f"(broad or UID-scoped — either kind gets removed)...")
+            matches = self._burp_find_matching_line_numbers(port)
+            if not matches:
+                self._burp_log("[*] No matching rules found in the table — nothing to delete.")
+            for line_num, line_text in sorted(matches, key=lambda t: t[0], reverse=True):
+                self._burp_log(f"[*] iptables -t nat -D OUTPUT {line_num}   (removing: {line_text})")
+                _, out = self._run_adb_su(f"iptables -t nat -D OUTPUT {line_num}")
+                self._burp_log(out if out else "(rule removed, no output)")
+
+            self._burp_log(f"[*] adb reverse --remove tcp:{port}")
+            rem = subprocess.run(["adb", "reverse", "--remove", f"tcp:{port}"], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+            rem_out = (rem.stdout + rem.stderr).strip()
+            if "not found" in rem_out.lower():
+                self._burp_log("(no active reverse tunnel for this port — already removed or never enabled, that's fine)")
+            else:
+                self._burp_log(rem_out or "(removed)")
+
+            has_443, has_80, raw = self._burp_check_rules(port)
+            self._burp_log("---- iptables -t nat -L OUTPUT -n --line-numbers (post-revert) ----")
+            self._burp_log(raw if raw else "(empty)")
+            if not has_443 and not has_80:
+                self._set_burp_status("Status: reverted — not routed.", "#A0A0A5")
+                self.update_task_state("Burp redirect reverted.", "idle")
+            else:
+                self._burp_log("[WARN] A DNAT rule is still present after revert. If this persists, run 'adb reboot' to force-clear iptables state.")
+                self._set_burp_status("Status: revert incomplete — rule still present", "#FFB300")
+                self.update_task_state("Burp redirect revert incomplete.", "failed")
+        except Exception as e:
+            self._burp_log(f"[FAIL] Exception: {str(e)}")
+            self.update_task_state("Burp redirect revert failed.", "failed")
+
+    def start_burp_redirect_revert_scoped(self, combo):
+        package = self._resolve_selected_target(combo, warn=True)
+        if not package:
+            return
+        port = self._burp_get_port()
+        if not port:
+            return
+        self._burp_clear_log()
+        self.update_task_state(f"[Burp] Reverting redirect for {package} only (other apps stay active)...", "running")
+        threading.Thread(target=self._burp_redirect_revert_scoped_worker, args=(package, port), daemon=True).start()
+
+    def _burp_redirect_revert_scoped_worker(self, package, port):
+        """
+        Unlike burp_redirect_revert_worker (which clears EVERY rule on the port, and also
+        tears down the shared adb reverse tunnel), this only deletes the rule(s) scoped to
+        THIS app's UID — other apps' rules, and the adb reverse tunnel they all share, are
+        left untouched. Deliberately does NOT run 'adb reverse --remove' for that reason.
+        """
+        try:
+            uid = self._get_package_uid(package, self._burp_log)
+            if not uid:
+                self.update_task_state("Scoped revert failed - UID lookup failed.", "failed")
+                return
+
+            self._burp_log(f"[*] Scanning for DNAT rules scoped to {package} (UID {uid}) on port {port}...")
+            matches = self._burp_find_matching_line_numbers(port)
+            uid_re = re.compile(rf"owner UID match {re.escape(uid)}\b")
+            uid_matches = [(n, t) for n, t in matches if uid_re.search(t)]
+
+            if not uid_matches:
+                self._burp_log(f"[*] No rule scoped to UID {uid} found — nothing to delete for this app. "
+                                f"(If you meant the broad, unscoped redirect, use 'Revert (ALL Apps On This Port)' instead.)")
+                self.update_task_state(f"No scoped rule found for {package}.", "idle")
+                return
+
+            for line_num, line_text in sorted(uid_matches, key=lambda t: t[0], reverse=True):
+                self._burp_log(f"[*] iptables -t nat -D OUTPUT {line_num}   (removing: {line_text})")
+                _, out = self._run_adb_su(f"iptables -t nat -D OUTPUT {line_num}")
+                self._burp_log(out if out else "(rule removed, no output)")
+
+            self._burp_log(f"\n[*] Re-checking — rules for OTHER apps on this port are expected to still be present below:")
+            _, raw = self._run_adb_su("iptables -t nat -L OUTPUT -n --line-numbers")
+            self._burp_log(raw if raw else "(empty)")
+            self._burp_log(f"\n[OK] {package}'s capture rule removed. adb reverse tcp:{port} left untouched — other apps still route through it.")
+            self.update_task_state(f"{package} capture reverted (other apps unaffected).", "success")
+        except Exception as e:
+            self._burp_log(f"[FAIL] Exception: {str(e)}")
+            self.update_task_state("Scoped revert failed.", "failed")
+
+    # ---------------------------------------------------------------------
+    # SHARED — TARGET APP SCAN + BYPASS SCRIPT RUNNER
+    #
+    # Installed-app list is the same regardless of which tab asked for it (same phone),
+    # so one scan refreshes EVERY registered combo box (self.target_app_combo_widgets).
+    # Each combo's own SELECTION stays independent — scanning again only auto-picks an
+    # entry for a combo that doesn't already have a real one, so it never clobbers a
+    # deliberate choice already made in the other tab.
     # ---------------------------------------------------------------------
     def start_dynamic_app_scan(self):
-        self.update_task_state("[ADB] Querying installed packages for dynamic testing...", "running")
+        self.update_task_state("[ADB] Querying installed packages...", "running")
         threading.Thread(target=self.dynamic_app_scan_worker, daemon=True).start()
 
     def dynamic_app_scan_worker(self):
@@ -1654,24 +2369,26 @@ class NKCyberSuiteMobile(ctk.CTk):
                 self.discovered_dynamic_apps[display_string] = (pkg, app_label)
                 dropdown_entries.append(display_string)
 
-            self.cbo_dynamic_apps.configure(values=dropdown_entries)
-            self.cbo_dynamic_apps.set(dropdown_entries[0])
+            for combo in self.target_app_combo_widgets:
+                if not combo.winfo_exists():
+                    continue
+                combo.configure(values=dropdown_entries)
+                current = combo.get()
+                if not current or "Scan" in current or current not in self.discovered_dynamic_apps:
+                    combo.set(dropdown_entries[0])
             self.update_task_state("Installed app list synced.", "success")
         except Exception:
             self.update_task_state("ADB Parser unexpected crash.", "failed")
 
-    def start_bypass_script(self, mode):
+    def start_bypass_script(self, mode, combo):
         if frida is None:
             messagebox.showerror("Frida Missing", "The 'frida' Python package is not installed.")
             return
         if mode == "custom" and not self.custom_frida_script_path:
             messagebox.showwarning("No Custom Script", "Load a custom Frida script first.")
             return
-        selected_display = self.cbo_dynamic_apps.get()
-        if not selected_display or "Scan" in selected_display:
-            messagebox.showwarning("No Target", "Scan and select a target app first.")
+        if not self._resolve_selected_target(combo, warn=True):
             return
-        self.dynamic_target_package = self.discovered_dynamic_apps[selected_display][0]
         self.update_task_state(f"[Frida] Attaching to {self.dynamic_target_package}...", "running")
         threading.Thread(target=self.bypass_script_worker, args=(mode,), daemon=True).start()
 
@@ -1712,8 +2429,7 @@ class NKCyberSuiteMobile(ctk.CTk):
             self.frida_script = script
 
             loaded_labels = ", ".join(l for l, _ in script_paths)
-            self.dynamic_results_box.insert("end", f"[+] Loaded: {loaded_labels} against {self.dynamic_target_package}\n")
-            self.dynamic_results_box.see("end")
+            self._dyn_log(f"[+] Loaded: {loaded_labels} against {self.dynamic_target_package}")
             self.update_task_state("Bypass script(s) loaded and running.", "success")
         except Exception as e:
             self.log(f"[-] Frida bypass exception: {str(e)}")
@@ -1721,14 +2437,64 @@ class NKCyberSuiteMobile(ctk.CTk):
 
     def _on_frida_message(self, message, data):
         if message["type"] == "send":
-            text = message["payload"]
+            payload = message["payload"]
+            if isinstance(payload, dict) and payload.get("tag") == "flutter_ssl_bypass":
+                self._on_flutter_bypass_message(payload)
+                return
+            text = payload
         elif message["type"] == "error":
             text = f"ERROR: {message.get('stack', message.get('description', message))}"
         else:
             text = str(message)
         self.log(f"[Frida] {text}")
-        self.dynamic_results_box.insert("end", f"{text}\n")
-        self.dynamic_results_box.see("end")
+        self._dyn_log(text)
+
+    # ---------------------------------------------------------------------
+    # FLUTTER SSL BYPASS DECK — runtime callbacks for the "Run Auto Flutter SSL Bypass"
+    # button on the 🎯 Flutter SSL Bypass tab (UI itself lives in generate_flutter_bypass_deck_ui).
+    # Kept physically here (not moved) since it shares bypass_script_worker/_on_frida_message/
+    # stop_dynamic_session with the native flow just below — flutter_auto_bypass_worker calls
+    # straight into bypass_script_worker("custom") to actually attach.
+    # ---------------------------------------------------------------------
+    def _flutter_log(self, msg):
+        self.flutter_results_box.insert("end", msg + "\n")
+        self.flutter_results_box.see("end")
+
+    def _on_flutter_bypass_message(self, payload):
+        event = payload.get("event")
+        if event == "module_found":
+            self._flutter_log(f"[INFO] libflutter.so loaded @ {payload.get('base')} — attaching hook at {payload.get('target')} (offset {payload.get('offset')})")
+            self.lbl_flutter_pipeline.configure(text="Status: module found, installing hook...", text_color="#FFB300")
+        elif event == "hook_installed":
+            self._flutter_log("[OK] Hook installed. Waiting for the app to make an HTTPS/TLS request to confirm it actually fires...")
+            self.lbl_flutter_pipeline.configure(text="Status: hook installed — waiting for traffic to confirm", text_color="#00E5FF")
+            self.flutter_hit_count = 0
+            self.lbl_flutter_hits.configure(text="Hook Hits: 0 (waiting for traffic)", text_color="#FFB300")
+            self._start_flutter_watchdog()
+        elif event == "hook_attach_failed":
+            self._flutter_log(f"[FAIL] Interceptor.attach threw: {payload.get('error')} — the detected offset does not point at valid code. Do not trust this bypass.")
+            self.lbl_flutter_pipeline.configure(text="Status: hook attach FAILED — offset is wrong", text_color="#FF5252")
+            self.lbl_flutter_hits.configure(text="Hook Hits: attach failed", text_color="#FF5252")
+        elif event == "module_not_found":
+            self._flutter_log("[FAIL] libflutter.so is not loaded in the running process. Wrong target selected, app isn't Flutter, or it hasn't finished starting yet.")
+            self.lbl_flutter_pipeline.configure(text="Status: libflutter.so NOT FOUND in process", text_color="#FF5252")
+        elif event == "hit":
+            self.flutter_hit_count = payload.get("count", self.flutter_hit_count + 1)
+            self._flutter_log(f"[OK] Hook fired (#{self.flutter_hit_count}) — original retval={payload.get('before_retval')}, forced retval={payload.get('forced_retval')}")
+            self.lbl_flutter_hits.configure(text=f"Hook Hits: {self.flutter_hit_count} — CONFIRMED WORKING", text_color="#00E676")
+            self.lbl_flutter_pipeline.configure(text="Status: bypass CONFIRMED — cert validation is being forced to pass", text_color="#00E676")
+
+    def _start_flutter_watchdog(self):
+        if self.flutter_watchdog_timer:
+            self.flutter_watchdog_timer.cancel()
+        self.flutter_watchdog_timer = threading.Timer(15.0, self._flutter_watchdog_fire)
+        self.flutter_watchdog_timer.daemon = True
+        self.flutter_watchdog_timer.start()
+
+    def _flutter_watchdog_fire(self):
+        if self.flutter_hit_count == 0:
+            self._flutter_log("[WARN] No hook activity 15s after attach. Either the app hasn't made an HTTPS request yet (open a screen that hits the network), or the detected offset is wrong for this build.")
+            self.lbl_flutter_pipeline.configure(text="Status: no hook activity yet — trigger network traffic in the app", text_color="#FFB300")
 
     def browse_custom_frida_script(self):
         filepath = filedialog.askopenfilename(title="Select Custom Frida Script", filetypes=[("Frida JS", "*.js")])
@@ -1737,8 +2503,78 @@ class NKCyberSuiteMobile(ctk.CTk):
             self.lbl_custom_script.configure(text=os.path.basename(filepath), text_color="#00E676")
             self.btn_run_custom_bypass.configure(state="normal")
 
+    def start_flutter_auto_bypass(self, combo):
+        if frida is None:
+            messagebox.showerror("Frida Missing", "The 'frida' Python package is not installed.")
+            return
+        if not self._resolve_selected_target(combo, warn=True):
+            return
+
+        apk_path = self.flutter_bypass_apk_path or self.target_apk
+        if not apk_path or not os.path.isfile(apk_path):
+            apk_path = filedialog.askopenfilename(
+                title="Select the target app's APK (to extract libflutter.so from)",
+                filetypes=[("APK Files", "*.apk")])
+            if not apk_path:
+                return
+        self.flutter_bypass_apk_path = apk_path
+        self.lbl_flutter_apk.configure(text=os.path.basename(apk_path), text_color="#FFFFFF")
+
+        if self.flutter_watchdog_timer:
+            self.flutter_watchdog_timer.cancel()
+        self.flutter_hit_count = 0
+        self.flutter_results_box.delete("1.0", "end")
+        self.lbl_flutter_confidence.configure(text="Confidence: —", text_color="#A0A0A5")
+        self.lbl_flutter_offset.configure(text="Offset: —", text_color="#A0A0A5")
+        self.lbl_flutter_hits.configure(text="Hook Hits: not attached yet", text_color="#A0A0A5")
+        self.lbl_flutter_pipeline.configure(text="Status: extracting libflutter.so from APK...", text_color="#FFB300")
+
+        self.update_task_state(f"[Flutter] Analyzing {os.path.basename(apk_path)} for the SSL verify offset...", "running")
+        threading.Thread(target=self.flutter_auto_bypass_worker, args=(apk_path,), daemon=True).start()
+
+    def flutter_auto_bypass_worker(self, apk_path):
+        try:
+            out_dir = os.path.join(os.path.dirname(os.path.abspath(apk_path)), "flutter_bypass_generated")
+
+            def _log(msg):
+                self._flutter_log(msg)
+
+            script_path, result = flutter_ssl_bypass.build_flutter_bypass_script(
+                apk_path, self.dynamic_target_package, out_dir, log=_log)
+
+            if not script_path:
+                self._flutter_log(f"[FAIL] {result.detail}")
+                self.lbl_flutter_confidence.configure(text="Confidence: NOT FOUND", text_color="#FF5252")
+                self.lbl_flutter_pipeline.configure(text="Status: offset detection failed — see diagnostics below", text_color="#FF5252")
+                self.update_task_state("Flutter SSL bypass: offset detection failed.", "failed")
+                return
+
+            if result.status == "confident":
+                self.lbl_flutter_confidence.configure(text="Confidence: HIGH (all refs agree)", text_color="#00E676")
+            else:
+                self.lbl_flutter_confidence.configure(text=f"Confidence: AMBIGUOUS ({len(result.candidates)} candidates)", text_color="#FFB300")
+                self._flutter_log(f"[WARN] {result.detail}")
+
+            self.lbl_flutter_offset.configure(text=f"Offset: {hex(result.offset)}", text_color="#00E5FF")
+            self._flutter_log(f"[OK] Script generated: {script_path}")
+
+            self.custom_frida_script_path = script_path
+            self.lbl_custom_script.configure(text=os.path.basename(script_path), text_color="#00E676")
+            self.btn_run_custom_bypass.configure(state="normal")
+            self.lbl_flutter_pipeline.configure(text="Status: attaching Frida session...", text_color="#FFB300")
+            self.update_task_state(f"Flutter offset {hex(result.offset)} detected ({result.status}). Attaching...", "running")
+
+            self.bypass_script_worker("custom")
+        except Exception as e:
+            self._flutter_log(f"[FAIL] Unexpected exception: {str(e)}")
+            self.lbl_flutter_pipeline.configure(text="Status: unexpected failure — see diagnostics below", text_color="#FF5252")
+            self.update_task_state("Flutter SSL bypass failed.", "failed")
+
     def stop_dynamic_session(self):
         try:
+            if self.flutter_watchdog_timer:
+                self.flutter_watchdog_timer.cancel()
+                self.flutter_watchdog_timer = None
             if self.frida_script:
                 self.frida_script.unload()
                 self.frida_script = None
@@ -1747,8 +2583,127 @@ class NKCyberSuiteMobile(ctk.CTk):
                 self.frida_session = None
             self.log("\n[*] Detached from Frida session.")
             self.update_task_state("Dynamic session detached.", "idle")
+            self.lbl_flutter_pipeline.configure(text="Status: detached.", text_color="#A0A0A5")
+            self.lbl_flutter_hits.configure(text="Hook Hits: session detached", text_color="#A0A0A5")
         except Exception as e:
             self.log(f"[-] Detach exception: {str(e)}")
+
+    # ---------------------------------------------------------------------
+    # NATIVE APPLICATION BYPASS DECK — LSPOSED MODULE BYPASS (cmd-driven, persistent)
+    #
+    # This is deliberately NOT Frida. It installs a pre-built LSPosed/Xposed module APK
+    # and scopes it to the target app by writing directly into LSPosed's own SQLite config
+    # (/data/adb/lspd/config/modules_config.db) via `adb shell su -c sqlite3` — the same
+    # mechanism the LSPosed Manager app itself uses, and the same one used manually
+    # during a real engagement. The module keeps working across app
+    # relaunches with no live attach required (unlike the Frida section above), but scope
+    # changes only take effect after a reboot.
+    # ---------------------------------------------------------------------
+    LSPD_MODULES_DB = "/data/adb/lspd/config/modules_config.db"
+    _PKG_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$")
+
+    def _lspd_log(self, msg):
+        if self.lspd_results_box.winfo_exists():
+            self.lspd_results_box.insert("end", msg + "\n")
+            self.lspd_results_box.see("end")
+        self.log(msg)
+
+    def _lspd_get_module_pkg(self):
+        pkg = (self.ent_lspd_module_pkg.get() or "").strip()
+        if not pkg or not self._PKG_NAME_RE.match(pkg):
+            messagebox.showwarning("Invalid Module Package", "Enter the LSPosed module's own package name (e.g. com.example.mymodule).")
+            return None
+        return pkg
+
+    def browse_lspd_module_apk(self):
+        filepath = filedialog.askopenfilename(title="Select LSPosed Module APK", filetypes=[("APK Files", "*.apk")])
+        if filepath:
+            self.lspd_module_apk_path = filepath
+            self.lbl_lspd_apk.configure(text=os.path.basename(filepath), text_color="#FFFFFF")
+
+    def start_lspd_install(self):
+        if not self.lspd_module_apk_path:
+            messagebox.showwarning("No Module APK", "Select the LSPosed module's APK first.")
+            return
+        self.update_task_state(f"[LSPosed] Installing {os.path.basename(self.lspd_module_apk_path)}...", "running")
+        threading.Thread(target=self.lspd_install_worker, daemon=True).start()
+
+    def lspd_install_worker(self):
+        self._lspd_log(f"[*] adb install -r {self.lspd_module_apk_path}")
+        proc = subprocess.run(["adb", "install", "-r", self.lspd_module_apk_path], capture_output=True, text=True, creationflags=SUBPROCESS_FLAGS)
+        out = (proc.stdout + proc.stderr).strip()
+        self._lspd_log(out if out else "(no output)")
+        if "Success" in out:
+            self._lspd_log("[OK] Installed. Now open the LSPosed Manager app on the device once so it registers the new module, "
+                            "then enter its package name below and click 'Enable + Scope to Target App'.")
+            self.update_task_state("LSPosed module installed.", "success")
+        else:
+            self._lspd_log("[FAIL] Install did not report Success — check the output above.")
+            self.update_task_state("LSPosed module install failed.", "failed")
+
+    def start_lspd_scope(self, combo):
+        module_pkg = self._lspd_get_module_pkg()
+        if not module_pkg:
+            return
+        target_pkg = self._resolve_selected_target(combo, warn=True)
+        if not target_pkg:
+            return
+        self.update_task_state(f"[LSPosed] Scoping {module_pkg} to {target_pkg}...", "running")
+        threading.Thread(target=self.lspd_scope_worker, args=(module_pkg, target_pkg), daemon=True).start()
+
+    def lspd_scope_worker(self, module_pkg, target_pkg):
+        self._lspd_log(f"[*] Enabling module '{module_pkg}' in LSPosed's config db...")
+        sql_enable = f"UPDATE modules SET enabled=1 WHERE module_pkg_name='{module_pkg}';"
+        rc, out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_enable}"')
+        if out:
+            self._lspd_log(out)
+
+        self._lspd_log(f"[*] Scoping '{module_pkg}' to target app '{target_pkg}'...")
+        sql_scope = (f"INSERT OR IGNORE INTO scope (mid, app_pkg_name, user_id) "
+                     f"SELECT mid, '{target_pkg}', 0 FROM modules WHERE module_pkg_name='{module_pkg}';")
+        rc2, out2 = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_scope}"')
+        if out2:
+            self._lspd_log(out2)
+
+        combined = (out + out2).lower()
+        if "no such table" in combined or "unable to open" in combined or "not found" in combined:
+            self._lspd_log("[FAIL] Could not reach LSPosed's config db. Is LSPosed actually installed and active on this device (check "
+                            "the LSPosed Manager app), and is su access granted?")
+            self.update_task_state("LSPosed scoping failed.", "failed")
+            return
+
+        self._lspd_log("[*] Verifying the module is registered and the scope row was written...")
+        self._lspd_verify_impl(module_pkg, target_pkg)
+        self._lspd_log("\n[!] REBOOT REQUIRED — LSPosed only applies scope changes on next boot ('adb reboot'). "
+                        "After reboot, relaunch the target app and confirm the module's own hook logs fire.")
+        self.update_task_state(f"LSPosed scope written for {target_pkg} — reboot required.", "success")
+
+    def start_lspd_verify(self, combo):
+        module_pkg = self._lspd_get_module_pkg()
+        if not module_pkg:
+            return
+        target_pkg = self._resolve_selected_target(combo, warn=True)
+        if not target_pkg:
+            return
+        self.update_task_state(f"[LSPosed] Verifying scope for {module_pkg}...", "running")
+        threading.Thread(target=self._lspd_verify_impl, args=(module_pkg, target_pkg), daemon=True).start()
+
+    def _lspd_verify_impl(self, module_pkg, target_pkg):
+        sql_mod = f"SELECT mid, module_pkg_name, enabled FROM modules WHERE module_pkg_name='{module_pkg}';"
+        _, mod_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_mod}"')
+        self._lspd_log(f"---- modules row for '{module_pkg}' ----")
+        self._lspd_log(mod_out if mod_out else "(EMPTY — module not registered yet. Open the LSPosed Manager app on the device once, then retry.)")
+
+        sql_scope = f"SELECT * FROM scope WHERE app_pkg_name='{target_pkg}';"
+        _, scope_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_scope}"')
+        self._lspd_log(f"---- scope rows for '{target_pkg}' ----")
+        self._lspd_log(scope_out if scope_out else "(EMPTY — not scoped yet.)")
+
+        if mod_out and scope_out:
+            self._lspd_log("[OK] Module is registered AND scoped to the target app. Reboot (if you haven't since scoping) and test.")
+            self.update_task_state("LSPosed scope verified.", "success")
+        else:
+            self.update_task_state("LSPosed scope verification: incomplete.", "failed")
 
 
 if __name__ == "__main__":

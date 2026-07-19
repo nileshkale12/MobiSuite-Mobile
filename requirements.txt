@@ -1,5 +1,6 @@
 customtkinter
 paramiko
 scp
+pyinstaller
 cryptography
 frida
