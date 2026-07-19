@@ -10,15 +10,17 @@ MobiSuite is a cross-platform, multi-threaded GUI pipeline engine designed for m
 | :---: | :---: |
 | ![Android Utilities Deck](screenshots/01_android_deck.png) | ![iOS Utilities Deck](screenshots/02_ios_deck.png) |
 
-| Bug Bounty Recon (Static Analysis) | Native/Flutter Application Bypass (Frida) |
+| Bug Bounty Recon (Static Analysis) | Native Application Bypass (Frida + LSPosed) |
 | :---: | :---: |
 | ![Bug Bounty Recon Toolkit](screenshots/03_recon_deck.png) | ![Native Application Bypass Toolkit](screenshots/04_dynamic_deck.png) |
 
-| Environment Settings (Tool Inventory) | Live Terminal Logs |
+| Flutter Application Bypass (Auto Offset Detection) | Environment Settings (Tool Inventory) |
 | :---: | :---: |
-| ![Environment Settings Deck](screenshots/05_settings_deck.png) | ![Live Terminal Logs Deck](screenshots/06_console_deck.png) |
+| ![Flutter Application Bypass Toolkit](screenshots/07_flutter_bypass_deck.png) | ![Environment Settings Deck](screenshots/05_settings_deck.png) |
 
-> Screenshots reflect an earlier build. The dynamic-testing deck pictured has since been split into two dedicated tabs — 🦋 **Flutter Application Bypass** and 🔒 **Native Application Bypass** — which also added Burp traffic routing and a persistent LSPosed module workflow described below.
+| Live Terminal Logs |
+| :---: |
+| ![Live Terminal Logs Deck](screenshots/06_console_deck.png) |
 
 ---
 
