@@ -756,43 +756,43 @@ class NKCyberSuiteMobile(ctk.CTk):
         card.pack(fill="x", pady=4)
         ctk.CTkLabel(card, text=f"{step_num} Route Traffic to Burp Suite", font=ctk.CTkFont(size=12, weight="bold"), text_color="#7C4DFF").pack(anchor="w", padx=15, pady=(6, 2))
         ctk.CTkLabel(card,
-            text="'Enable Redirect' routes the WHOLE device's port 80/443 traffic to Burp (adb reverse + iptables NAT) — quick "
-                 "for general recon. 'Generate Capture-Traffic Script' instead writes a .bat that redirects ONLY the selected "
-                 "app's traffic (UID-scoped), so it won't break anything else on the phone — run that .bat directly in cmd.exe, "
-                 "any time, including after a reboot. In Burp: Proxy -> Settings -> listener on 127.0.0.1:<port> with "
-                 "'Support invisible proxying' enabled.\n"
-                 "⚠ IMPORTANT: a redirect rule only catches NEW connections — it does nothing for connections the app already had "
-                 "open before you enabled it. If nothing shows up in Burp after enabling, click 'Force-Restart Target App' below "
-                 "(or manually force-stop + reopen it) so it makes a fresh connection under the new rule.\n"
-                 "⚠ Switching the app dropdown above does NOT set up a redirect by itself — the redirect is tied to whichever app "
-                 "you clicked Generate/Enable FOR, not whatever's currently selected. Picking a different app? Click Generate/Enable "
-                 "again for it (safe to do — scoped rules stack, testing app #2 doesn't remove app #1's rule). Use 'Show Active "
-                 "Capture Rules' below any time to see exactly which app(s) are actually being redirected right now.\n"
-                 "⚠ 'Revert (ALL Apps On This Port)' clears EVERY rule on this port — including other apps you set up earlier in "
-                 "the same session. If you're testing multiple apps at once, use 'Revert (This App Only)' instead — it only removes "
-                 "the currently-selected app's own UID-scoped rule and leaves everyone else's capture running.",
-            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=780).pack(anchor="w", padx=15, pady=(0, 6))
+            text="In Burp: Proxy -> Settings -> add a listener on 127.0.0.1:<port> with 'Support invisible proxying' enabled.",
+            font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=780).pack(anchor="w", padx=15, pady=(0, 8))
 
         sub_a = ctk.CTkFrame(card, fg_color="transparent")
-        sub_a.pack(fill="x", padx=15, pady=(0, 6))
+        sub_a.pack(fill="x", padx=15, pady=(0, 2))
         ctk.CTkLabel(sub_a, text="Burp Port:").pack(side="left", padx=(0, 5))
         ctk.CTkEntry(sub_a, width=80, textvariable=self.burp_port_var).pack(side="left", padx=(0, 15))
-        ctk.CTkButton(sub_a, text="Enable Redirect (All Apps)", width=180, fg_color="#5E35B1", hover_color="#6F35B1",
-                      command=self.start_burp_redirect_enable).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(sub_a, text="Verify Rules", width=120, fg_color="#0288D1", hover_color="#039BE5",
-                      command=self.start_burp_redirect_verify).pack(side="left", padx=5)
-        ctk.CTkButton(sub_a, text="Revert (ALL Apps On This Port)", width=220, fg_color="#B71C1C", hover_color="#C62828",
-                      command=self.start_burp_redirect_revert).pack(side="left", padx=5)
 
+        ctk.CTkLabel(card, text="Option A — This App Only",
+                     font=ctk.CTkFont(size=10, weight="bold"), text_color="#4DD0E1").pack(anchor="w", padx=15, pady=(4, 2))
+        sub_b1 = ctk.CTkFrame(card, fg_color="transparent")
+        sub_b1.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkButton(sub_b1, text="Create Script For This App", width=200, fg_color="#00838F", hover_color="#00ACC1",
+                      command=lambda: self.start_generate_capture_script(combo)).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_b1, text="Run Script Now", width=150, fg_color="#2E7D32", hover_color="#388E3C",
+                      command=lambda: self.start_run_capture_script(combo)).pack(side="left", padx=5)
+        ctk.CTkButton(sub_b1, text="Stop Routing (This App Only)", width=200, fg_color="#37474F", hover_color="#455A64",
+                      command=lambda: self.start_burp_redirect_revert_scoped(combo)).pack(side="left", padx=5)
+
+        ctk.CTkLabel(card, text="Option B — Whole Device",
+                     font=ctk.CTkFont(size=10, weight="bold"), text_color="#B39DDB").pack(anchor="w", padx=15, pady=(4, 2))
         sub_a2 = ctk.CTkFrame(card, fg_color="transparent")
         sub_a2.pack(fill="x", padx=15, pady=(0, 6))
-        ctk.CTkButton(sub_a2, text="Generate Capture-Traffic Script (This App Only)", width=280, fg_color="#00838F", hover_color="#00ACC1",
-                      command=lambda: self.start_generate_capture_script(combo)).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(sub_a2, text="Revert (This App Only)", width=180, fg_color="#37474F", hover_color="#455A64",
-                      command=lambda: self.start_burp_redirect_revert_scoped(combo)).pack(side="left", padx=5)
-        ctk.CTkButton(sub_a2, text="Force-Restart Target App", width=200, fg_color="#EF6C00", hover_color="#F57C00",
-                      command=lambda: self.start_force_restart_target(combo)).pack(side="left", padx=5)
-        ctk.CTkButton(sub_a2, text="Show Active Capture Rules", width=200, fg_color="#37474F", hover_color="#455A64",
+        ctk.CTkButton(sub_a2, text="Start Routing (Whole Device)", width=190, fg_color="#5E35B1", hover_color="#6F35B1",
+                      command=self.start_burp_redirect_enable).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_a2, text="Check If Routing Is Active", width=170, fg_color="#0288D1", hover_color="#039BE5",
+                      command=self.start_burp_redirect_verify).pack(side="left", padx=5)
+        ctk.CTkButton(sub_a2, text="Stop Routing (Whole Device)", width=190, fg_color="#B71C1C", hover_color="#C62828",
+                      command=self.start_burp_redirect_revert).pack(side="left", padx=5)
+
+        ctk.CTkLabel(card, text="Shared Tools",
+                     font=ctk.CTkFont(size=10, weight="bold"), text_color="#7A7A80").pack(anchor="w", padx=15, pady=(4, 2))
+        sub_a3 = ctk.CTkFrame(card, fg_color="transparent")
+        sub_a3.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkButton(sub_a3, text="Restart App (Fresh Connection)", width=210, fg_color="#EF6C00", hover_color="#F57C00",
+                      command=lambda: self.start_force_restart_target(combo)).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(sub_a3, text="Show What's Currently Routed", width=210, fg_color="#37474F", hover_color="#455A64",
                       command=self.start_show_active_rules).pack(side="left", padx=5)
 
         sub_b = ctk.CTkFrame(card, fg_color="transparent")
@@ -952,8 +952,45 @@ class NKCyberSuiteMobile(ctk.CTk):
         log("[*] Run it directly in cmd.exe (double-click, or `cmd /c` it) — no Python/GUI needed. Redo after every device reboot.")
         self.update_task_state(f"Capture-traffic script ready: {os.path.basename(out_path)}", "success")
         messagebox.showinfo("Capture-Traffic Script Generated",
-                             f"Written to:\n{abs_path}\n\nRun it in cmd.exe. Re-run after every device reboot "
-                             f"(the redirect doesn't persist).")
+                             f"Written to:\n{abs_path}\n\nClick 'Run Script Now' to run it, or run it in cmd.exe. "
+                             f"Re-run after every device reboot (the redirect doesn't persist).")
+
+    def _capture_script_path_for(self, package, port):
+        safe_pkg = re.sub(r"[^A-Za-z0-9._-]", "_", package)
+        return os.path.abspath(os.path.join(CAPTURE_TRAFFIC_OUTPUT_DIR, f"capture_traffic_{safe_pkg}_{port}.bat"))
+
+    def start_run_capture_script(self, combo):
+        """Fetches the .bat generated by 'Create Script For This App' for the currently
+        selected app + port, and runs it — same effect as double-clicking it in cmd.exe,
+        just triggered from a button instead of manually finding the file."""
+        package = self._resolve_selected_target(combo, warn=True)
+        if not package:
+            return
+        port = self._burp_get_port()
+        if not port:
+            return
+        script_path = self._capture_script_path_for(package, port)
+        if not os.path.isfile(script_path):
+            messagebox.showwarning("Script Not Found",
+                                    f"No capture-traffic script found for {package} on port {port}.\n\n"
+                                    f"Click 'Create Script For This App' first.\n\nExpected: {script_path}")
+            return
+        self._burp_log(f"[*] Running {script_path} ...")
+        self.update_task_state(f"[Capture Traffic] Running script for {package}...", "running")
+        threading.Thread(target=self._run_capture_script_worker, args=(script_path, package), daemon=True).start()
+
+    def _run_capture_script_worker(self, script_path, package):
+        try:
+            if IS_LINUX:
+                subprocess.Popen(["bash", script_path])
+            else:
+                subprocess.Popen(["cmd.exe", "/c", script_path],
+                                  creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=os.path.dirname(script_path))
+            self._burp_log(f"[OK] Launched in a new console window. Check that window for progress and any errors.")
+            self.update_task_state(f"Capture-traffic script launched for {package}.", "success")
+        except Exception as e:
+            self._burp_log(f"[FAIL] Could not launch script: {str(e)}")
+            self.update_task_state("Capture-traffic script launch failed.", "failed")
 
     # ---------------------------------------------------------------------
     # SHARED — FORCE-RESTART TARGET APP
@@ -1046,9 +1083,7 @@ class NKCyberSuiteMobile(ctk.CTk):
         for uid, ports in scoped.items():
             pkg_name = self._resolve_pkg_name_from_uid(uid) or "unknown package"
             self._burp_log(f"  {pkg_name} (UID {uid}) — ports {sorted(ports, key=int)}")
-        self._burp_log("\nIf the app you want isn't listed above, its traffic is NOT being redirected — select it in the target "
-                        "picker and click 'Generate Capture-Traffic Script' or 'Enable Redirect' for it (this is additive, it "
-                        "won't remove any rule already listed here).")
+        self._burp_log("\nApp not listed? Its traffic isn't routed yet — select it above and use Option A or B.")
         self.update_task_state("Active capture rules listed.", "success")
 
     # ---------------------------------------------------------------------
@@ -1058,12 +1093,8 @@ class NKCyberSuiteMobile(ctk.CTk):
         lbl = ctk.CTkLabel(self.view_native_bypass, text="🔒 Native Application Bypass", font=ctk.CTkFont(size=18, weight="bold"))
         lbl.pack(anchor="w", padx=10, pady=(5, 2))
         ctk.CTkLabel(self.view_native_bypass,
-            text="WHAT THIS TAB IS FOR: bypassing SSL pinning / root-RASP checks on NATIVE (Java/Kotlin, non-Flutter) apps. "
-                 "Two independent approaches are provided below — use whichever matches your workflow, or both:\n"
-                 "  • Frida-Based Bypass: live, in-process attach — fast for one-off testing, but nothing persists after the app restarts or the phone reboots.\n"
-                 "  • LSPosed Module Bypass: installs a persistent Xposed/LSPosed module you built separately — survives relaunches, matches a real "
-                 "engagement workflow (build a dedicated module in Android Studio, then install + scope it here).\n"
-                 "HOW TO USE: ① pick the target app, ② route its traffic to Burp, ③ run ONE of the two bypass sections below.",
+            text="Bypass SSL pinning / root checks on native (Java/Kotlin) apps. Steps: ① pick app, ② route traffic to Burp, "
+                 "③ run Frida Bypass (quick, temporary) or LSPosed Bypass (persistent).",
             font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=820).pack(anchor="w", padx=10, pady=(0, 10))
 
         combo = self._build_target_selector_card(self.view_native_bypass)
@@ -1107,10 +1138,8 @@ class NKCyberSuiteMobile(ctk.CTk):
         ctk.CTkLabel(card_lspd, text="③B LSPosed Module Bypass (cmd-driven — install + scope a pre-built module)",
                      font=ctk.CTkFont(size=12, weight="bold"), text_color="#00E676").pack(anchor="w", padx=15, pady=(6, 2))
         ctk.CTkLabel(card_lspd,
-            text="Requires LSPosed already active on the device (Zygisk/KernelSU-Next, etc.) and a module APK you built separately "
-                 "(e.g. in Android Studio). This installs it, enables it, and scopes it to the target app via adb + sqlite3 against "
-                 "LSPosed's own modules_config.db — the same commands used manually during a real engagement. "
-                 "⚠ Reboot the device after scoping — LSPosed only applies scope changes on next boot.",
+            text="Requires LSPosed active on the device and a module APK you built separately. Installs, enables, and scopes it "
+                 "to the target app. ⚠ Reboot the device after scoping for it to take effect.",
             font=ctk.CTkFont(size=10), text_color="#A0A0A5", anchor="w", justify="left", wraplength=820).pack(anchor="w", padx=15, pady=(0, 6))
 
         sub_l1 = ctk.CTkFrame(card_lspd, fg_color="transparent")
@@ -2174,6 +2203,10 @@ class NKCyberSuiteMobile(ctk.CTk):
                 self.update_task_state("Burp redirect failed - adb reverse error.", "failed")
                 return
 
+            self._burp_log("[*] Disabling IPv6 (the redirect below is IPv4-only — IPv6 traffic would otherwise sail past it and never reach Burp)...")
+            self._run_adb_su("echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6")
+            self._run_adb_su("echo 1 > /proc/sys/net/ipv6/conf/wlan0/disable_ipv6")
+
             self._burp_log(f"[*] iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:{port}")
             rc443, out443 = self._run_adb_su(f"iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:{port}")
             self._burp_log(out443 if out443 else f"(no output, exit code {rc443})")
@@ -2594,8 +2627,7 @@ class NKCyberSuiteMobile(ctk.CTk):
     # This is deliberately NOT Frida. It installs a pre-built LSPosed/Xposed module APK
     # and scopes it to the target app by writing directly into LSPosed's own SQLite config
     # (/data/adb/lspd/config/modules_config.db) via `adb shell su -c sqlite3` — the same
-    # mechanism the LSPosed Manager app itself uses, and the same one used manually
-    # during a real engagement. The module keeps working across app
+    # mechanism the LSPosed Manager app itself uses. The module keeps working across app
     # relaunches with no live attach required (unlike the Frida section above), but scope
     # changes only take effect after a reboot.
     # ---------------------------------------------------------------------
@@ -2652,15 +2684,22 @@ class NKCyberSuiteMobile(ctk.CTk):
         threading.Thread(target=self.lspd_scope_worker, args=(module_pkg, target_pkg), daemon=True).start()
 
     def lspd_scope_worker(self, module_pkg, target_pkg):
-        self._lspd_log(f"[*] Enabling module '{module_pkg}' in LSPosed's config db...")
-        sql_enable = f"UPDATE modules SET enabled=1 WHERE module_pkg_name='{module_pkg}';"
+        # Schema note: LSPosed's modules_config.db has NO `mid` column and NO `enabled` column on
+        # the `modules` table itself - `modules` is just (module_pkg_name, apk_path). Enable state
+        # lives in a separate table, `modules_state` (module_pkg_name, user_id, enabled,
+        # scope_request_blocked), and `scope` keys directly on module_pkg_name as plain text
+        # (module_pkg_name, app_pkg_name, user_id), not a numeric id join. The SQL below matches
+        # that schema; referencing `mid`/`modules.enabled` instead fails with "no such column".
+        self._lspd_log(f"[*] Registering '{module_pkg}' as enabled in modules_state...")
+        sql_enable = (f"INSERT OR REPLACE INTO modules_state (module_pkg_name, user_id, enabled, "
+                      f"scope_request_blocked) VALUES ('{module_pkg}', 0, 1, 0);")
         rc, out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_enable}"')
         if out:
             self._lspd_log(out)
 
         self._lspd_log(f"[*] Scoping '{module_pkg}' to target app '{target_pkg}'...")
-        sql_scope = (f"INSERT OR IGNORE INTO scope (mid, app_pkg_name, user_id) "
-                     f"SELECT mid, '{target_pkg}', 0 FROM modules WHERE module_pkg_name='{module_pkg}';")
+        sql_scope = (f"INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) "
+                     f"VALUES ('{module_pkg}', '{target_pkg}', 0);")
         rc2, out2 = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_scope}"')
         if out2:
             self._lspd_log(out2)
@@ -2671,11 +2710,20 @@ class NKCyberSuiteMobile(ctk.CTk):
                             "the LSPosed Manager app), and is su access granted?")
             self.update_task_state("LSPosed scoping failed.", "failed")
             return
+        if "foreign key" in combined or "constraint failed" in combined:
+            self._lspd_log(f"[FAIL] '{module_pkg}' isn't registered in the `modules` table yet — LSPosed hasn't picked up the "
+                            f"install. Open the LSPosed Manager app on the device once (or force-stop/relaunch it), then retry.")
+            self.update_task_state("LSPosed scoping failed - module not yet registered.", "failed")
+            return
 
         self._lspd_log("[*] Verifying the module is registered and the scope row was written...")
         self._lspd_verify_impl(module_pkg, target_pkg)
         self._lspd_log("\n[!] REBOOT REQUIRED — LSPosed only applies scope changes on next boot ('adb reboot'). "
-                        "After reboot, relaunch the target app and confirm the module's own hook logs fire.")
+                        "After reboot, relaunch the target app and confirm the module's own hook logs fire.\n"
+                        "[!] NOTE: reinstalling either the target app or this module's own APK later can silently "
+                        "drop scope rows (the target app's row, or even other apps previously scoped to this same "
+                        "module). If a bypass that worked before suddenly stops firing with zero code changes, "
+                        "re-run 'Verify Scope' below before assuming it's a real regression.")
         self.update_task_state(f"LSPosed scope written for {target_pkg} — reboot required.", "success")
 
     def start_lspd_verify(self, combo):
@@ -2689,15 +2737,32 @@ class NKCyberSuiteMobile(ctk.CTk):
         threading.Thread(target=self._lspd_verify_impl, args=(module_pkg, target_pkg), daemon=True).start()
 
     def _lspd_verify_impl(self, module_pkg, target_pkg):
-        sql_mod = f"SELECT mid, module_pkg_name, enabled FROM modules WHERE module_pkg_name='{module_pkg}';"
+        # Schema note (see lspd_scope_worker's comment above for the full explanation):
+        # `modules` has no `mid`/`enabled` column - registration lives there as just
+        # (module_pkg_name, apk_path); enabled state is a separate `modules_state` row.
+        sql_mod = f"SELECT module_pkg_name, apk_path FROM modules WHERE module_pkg_name='{module_pkg}';"
         _, mod_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_mod}"')
         self._lspd_log(f"---- modules row for '{module_pkg}' ----")
         self._lspd_log(mod_out if mod_out else "(EMPTY — module not registered yet. Open the LSPosed Manager app on the device once, then retry.)")
 
-        sql_scope = f"SELECT * FROM scope WHERE app_pkg_name='{target_pkg}';"
+        sql_state = f"SELECT * FROM modules_state WHERE module_pkg_name='{module_pkg}';"
+        _, state_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_state}"')
+        self._lspd_log(f"---- modules_state row for '{module_pkg}' ----")
+        self._lspd_log(state_out if state_out else "(EMPTY — not marked enabled yet.)")
+
+        sql_scope = f"SELECT * FROM scope WHERE module_pkg_name='{module_pkg}' AND app_pkg_name='{target_pkg}';"
         _, scope_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_scope}"')
-        self._lspd_log(f"---- scope rows for '{target_pkg}' ----")
+        self._lspd_log(f"---- scope row for '{module_pkg}' -> '{target_pkg}' ----")
         self._lspd_log(scope_out if scope_out else "(EMPTY — not scoped yet.)")
+
+        # Full scope list for this module, not just the one target app — this is what actually
+        # catches a scope-drop: reinstalling the target app OR this module's own APK can silently
+        # wipe OTHER previously-scoped apps' rows, which the single-target query above would never
+        # reveal on its own.
+        sql_all_scope = f"SELECT app_pkg_name FROM scope WHERE module_pkg_name='{module_pkg}';"
+        _, all_scope_out = self._run_adb_su(f'sqlite3 {self.LSPD_MODULES_DB} "{sql_all_scope}"')
+        self._lspd_log(f"---- ALL apps currently scoped to '{module_pkg}' ----")
+        self._lspd_log(all_scope_out if all_scope_out else "(EMPTY)")
 
         if mod_out and scope_out:
             self._lspd_log("[OK] Module is registered AND scoped to the target app. Reboot (if you haven't since scoping) and test.")
