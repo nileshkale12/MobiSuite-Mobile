@@ -154,7 +154,7 @@ class NKCyberSuiteMobile(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.title("MobiSuite v1.3.0")
+        self.title("MobiSuite v1.4.0")
         self.geometry("1100x920")
         self.minsize(1000, 840)
         
